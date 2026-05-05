@@ -35,6 +35,18 @@ def get_status():
 def get_dashboard_kpis():
     return {"status": "success", "data": engine.get_dashboard_kpis()}
 
+@app.get("/api/dashboard/contract-decisions")
+def get_contract_decisions():
+    return {"status": "success", "data": engine.get_contract_decisions()}
+
+@app.get("/api/dashboard/catalog")
+def get_catalog():
+    return {"status": "success", "data": engine.get_catalog()}
+
+@app.get("/api/dashboard/catalog-recommendations")
+def get_catalog_recommendations():
+    return {"status": "success", "data": engine.get_catalog_recommendations()}
+
 @app.get("/api/dashboard/savings-leakage")
 def get_savings_leakage():
     return {"status": "success", "data": engine.get_savings_leakage()}
@@ -70,6 +82,11 @@ def classify_purchase(req: PurchaseRequest):
 @app.post("/api/submit-po")
 def submit_po(po_data: dict):
     result = engine.submit_po(po_data)
+    return {"status": "success", "data": result}
+
+@app.post("/api/add-to-catalog")
+def add_to_catalog(item_data: dict):
+    result = engine.add_to_catalog(item_data)
     return {"status": "success", "data": result}
 
 @app.get("/api/purchase-history")

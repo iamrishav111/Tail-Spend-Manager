@@ -432,3 +432,88 @@ th.numeric, td.numeric {
 .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
 .animate-slideInRight { animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-scaleIn { animation: scaleIn 0.3s ease-out; }
+
+/* Floating Nav for long pages */
+.floating-nav {
+  position: fixed;
+  right: 2.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  padding: 1rem 0.75rem;
+  border-radius: 999px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  z-index: 100;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.floating-nav:hover {
+  background: white;
+  box-shadow: var(--shadow-lg);
+  padding: 1.25rem 0.85rem;
+}
+
+.floating-nav-item {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--color-border);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  cursor: pointer;
+}
+
+.floating-nav-item:hover {
+  background-color: var(--color-primary);
+  transform: scale(1.4);
+}
+
+.floating-nav-item.active {
+  background-color: var(--color-primary);
+  transform: scale(1.6);
+  box-shadow: 0 0 10px var(--color-primary-light);
+}
+
+.floating-nav-item::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 2rem;
+  top: 50%;
+  transform: translateY(-50%) translateX(10px);
+  background: var(--color-text);
+  color: white;
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease-out;
+  box-shadow: var(--shadow-md);
+}
+
+.floating-nav-item:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+
+/* Smooth Scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Sticky Adjustments */
+.tabs-container.sticky {
+  transition: all 0.3s ease;
+}
+
+.tabs-container.sticky:not([style*="top: 72px"]) {
+  /* When it sticks, maybe add more shadow or different background */
+  box-shadow: var(--shadow-md);
+}

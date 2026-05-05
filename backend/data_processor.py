@@ -17,7 +17,22 @@ class DataEngine:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._load_data()
+            cls._instance.contracts_df_raw = pd.DataFrame()
+            cls._instance.supp_df_raw = pd.DataFrame()
+            cls._instance.category_taxonomy_df = pd.DataFrame()
+            cls._instance.demand_patterns_df = pd.DataFrame()
+            cls._instance.newly_added_catalog = []
+            cls._instance.mock_po_history = []
+            cls._instance.df_main = pd.DataFrame()
+            cls._instance.risk_and_consolidation = []
+            cls._instance.consolidation_kpis = {}
+            cls._instance.buyer_behavior = []
+            cls._instance.compliance_obj = {}
+            cls._instance.category_suppliers_payload = {}
+            try:
+                cls._instance._load_data()
+            except Exception as e:
+                print(f"CRITICAL: DataEngine failed to load: {e}")
         return cls._instance
 
     def _get_sheet_df(self, sheet_name):
@@ -45,8 +60,24 @@ class DataEngine:
                     return sheet_name, pickle.load(f)
             return sheet_name, pd.DataFrame()
 
+    def _safe_float(self, val, default=0.0):
+        try:
+            if pd.isna(val) or val is None: return default
+            return float(val)
+        except:
+            return default
+
+    def _safe_int(self, val, default=1):
+        try:
+            if pd.isna(val) or val is None: return default
+            return int(float(val))
+        except:
+            return default
+
     def _load_data(self):
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Initializing Global DataEngine...")
+        self.newly_added_catalog = []
+        self.mock_po_history = []
         
         sheets = ['Spend_Transactions', 'Contracts_Catalogue', 'Supplier_Master', 'Category_Taxonomy', 'Demand_Patterns']
         data = {}
@@ -86,47 +117,66 @@ class DataEngine:
         spend_df['PO Type'] = spend_df['PO Type'].fillna('').str.lower()
         spend_df['Payment Method'] = spend_df['Payment Method'].fillna('').str.strip()
         
-        contracts_df['Contracted Unit Price'] = pd.to_numeric(contracts_df['Contracted Unit Price'], errors='coerce')
-        contracts_df['Contract End Date'] = pd.to_datetime(contracts_df['Contract End Date'], errors='coerce')
-        valid_contracts = contracts_df.dropna(subset=['Contracted Unit Price']).copy()
-        valid_contracts = valid_contracts.rename(columns={'Category L2': 'Booked Category'})
-        contract_prices = valid_contracts.groupby(['Booked Category', 'Supplier ID'])['Contracted Unit Price'].min().reset_index()
-        contract_prices = contract_prices.rename(columns={'Contracted Unit Price': 'contracted_price'})
+        if 'Contracted Unit Price' in contracts_df.columns:
+            contracts_df['Contracted Unit Price'] = pd.to_numeric(contracts_df['Contracted Unit Price'], errors='coerce')
+        if 'Contract End Date' in contracts_df.columns:
+            contracts_df['Contract End Date'] = pd.to_datetime(contracts_df['Contract End Date'], errors='coerce')
+            
+        valid_contracts = pd.DataFrame()
+        if 'Contracted Unit Price' in contracts_df.columns:
+            valid_contracts = contracts_df.dropna(subset=['Contracted Unit Price']).copy()
         
-        # Merge with contracts to get Item SKU if possible
-        sku_map = valid_contracts[['Booked Category', 'Item Description', 'Item SKU']].drop_duplicates(['Booked Category', 'Item Description'])
-        df = pd.merge(spend_df, sku_map, on=['Booked Category', 'Item Description'], how='left')
+        contract_prices = pd.DataFrame()
+        if not valid_contracts.empty and 'Category L2' in valid_contracts.columns and 'Supplier ID' in valid_contracts.columns:
+            valid_contracts = valid_contracts.rename(columns={'Category L2': 'Booked Category'})
+            contract_prices = valid_contracts.groupby(['Booked Category', 'Supplier ID'])['Contracted Unit Price'].min().reset_index()
+            contract_prices = contract_prices.rename(columns={'Contracted Unit Price': 'contracted_price'})
         
-        df = pd.merge(df, contract_prices, on=['Booked Category', 'Supplier ID'], how='left')
-        df['has_contract'] = df['contracted_price'].notna()
+        # Merge logic
+        df = spend_df.copy()
+        if not valid_contracts.empty and 'Booked Category' in valid_contracts.columns and 'Item Description' in valid_contracts.columns:
+            sku_map = valid_contracts[['Booked Category', 'Item Description', 'Item SKU']].drop_duplicates(['Booked Category', 'Item Description'])
+            if 'Booked Category' in df.columns and 'Item Description' in df.columns:
+                df = pd.merge(df, sku_map, on=['Booked Category', 'Item Description'], how='left')
         
-        today = df['Invoice Date'].max()
+        if not contract_prices.empty and 'Booked Category' in df.columns and 'Supplier ID' in df.columns:
+            df = pd.merge(df, contract_prices, on=['Booked Category', 'Supplier ID'], how='left')
+            
+        df['has_contract'] = df['contracted_price'].notna() if 'contracted_price' in df.columns else False
+        
+        today = df['Invoice Date'].max() if 'Invoice Date' in df.columns else pd.Timestamp.now()
         if pd.isna(today): today = pd.Timestamp.now()
-        last_90_days = today - pd.Timedelta(days=90)
         
-        p80_map = df.groupby('Booked Category')['Amount'].quantile(0.8).to_dict()
-        df['P80_L2'] = df['Booked Category'].map(p80_map)
-        is_pcard_petty = df['Payment Method'].isin(['P-Card', 'Petty Cash'])
-        cond1 = df['Amount'] < df['P80_L2']
-        cond2 = df['Preferred Supplier Used'] == 'N'
-        cond3 = df['PO Type'].isin(['spot', 'emergency']) & (df['Preferred Supplier Used'] == 'N')
+        if 'Booked Category' in df.columns and 'Amount' in df.columns:
+            p80_map = df.groupby('Booked Category')['Amount'].quantile(0.8).to_dict()
+            df['P80_L2'] = df['Booked Category'].map(p80_map)
+        else:
+            df['P80_L2'] = 0
+            
+        is_pcard_petty = df['Payment Method'].isin(['P-Card', 'Petty Cash']) if 'Payment Method' in df.columns else False
+        cond1 = df['Amount'] < df['P80_L2'] if ('Amount' in df.columns and 'P80_L2' in df.columns) else False
+        cond2 = df['Preferred Supplier Used'] == 'N' if 'Preferred Supplier Used' in df.columns else False
+        cond3 = (df['PO Type'].isin(['spot', 'emergency']) & (df['Preferred Supplier Used'] == 'N')) if ('PO Type' in df.columns and 'Preferred Supplier Used' in df.columns) else False
         cond4 = ~df['has_contract']
         cond5 = is_pcard_petty
         df['is_tail'] = cond1 | cond2 | cond3 | cond4 | cond5
         
-        mav_cond1 = (df['PO Type'] == 'spot') & (df['Preferred Supplier Used'] == 'N')
-        mav_cond2 = df['Payment Method'].isin(['P-Card', 'Petty Cash', 'Direct']) & (df['Amount'] > 5000)
+        mav_cond1 = ((df['PO Type'] == 'spot') & (df['Preferred Supplier Used'] == 'N')) if ('PO Type' in df.columns and 'Preferred Supplier Used' in df.columns) else False
+        mav_cond2 = (df['Payment Method'].isin(['P-Card', 'Petty Cash', 'Direct']) & (df['Amount'] > 5000)) if ('Payment Method' in df.columns and 'Amount' in df.columns) else False
         mav_cond3 = ~df['has_contract']
         df['is_maverick'] = mav_cond1 | mav_cond2 | mav_cond3
         
-        conditions = [
-            (df['Preferred Supplier Used'] == 'N') & df['has_contract'],
-            is_pcard_petty,
-            df['PO Type'].isin(['spot', 'emergency']),
-            ~df['has_contract']
-        ]
-        choices = ["Maverick Buy", "P-Card Leakage", "Emergency/Spot Buy", "No Contract"]
-        df['root_cause'] = np.select(conditions, choices, default="Fragmented Spend (Sub-P80)")
+        if 'Amount' in df.columns:
+            conditions = [
+                (df['Preferred Supplier Used'] == 'N') & df['has_contract'] if ('Preferred Supplier Used' in df.columns and 'has_contract' in df.columns) else False,
+                is_pcard_petty,
+                df['PO Type'].isin(['spot', 'emergency']) if 'PO Type' in df.columns else False,
+                ~df['has_contract']
+            ]
+            choices = ["Maverick Buy", "P-Card Leakage", "Emergency/Spot Buy", "No Contract"]
+            df['root_cause'] = np.select(conditions, choices, default="Fragmented Spend (Sub-P80)")
+        else:
+            df['root_cause'] = "No Data"
         
         tail_df = df[df['is_tail']]
         maverick_df = df[df['is_maverick']]
@@ -140,6 +190,12 @@ class DataEngine:
             
         df['leakage'] = df.apply(calc_leakage, axis=1)
         maverick_leakage_savings = float(df['leakage'].sum())
+        self.df_main = df
+        self.spend_df = df
+        
+        today_val = df['Invoice Date'].max() if 'Invoice Date' in df.columns else pd.Timestamp.now()
+        if pd.isna(today_val): today_val = pd.Timestamp.now()
+        last_90_days = today_val - pd.Timedelta(days=90)
 
         leakage_last_quarter = float(df[df['Invoice Date'] >= last_90_days]['leakage'].sum())
         off_contract_transactions = int(((~df['has_contract']) | (df['Preferred Supplier Used'] == 'N')).sum())
@@ -232,32 +288,24 @@ class DataEngine:
                     "contract": { "value": c_val, "moq": c_moq, "expiry": c_expiry, "status": c_status }
                 }
                 
-                # Single Preferred Supplier logic: override later based on score if needed, but for historical display we can keep actual preferability. 
-                # Wait, the user asked "only one supplier is shown as preferred" in Category Suppliers.
-                # Let's override is_preferred based on active contract + lowest price + lowest risk.
                 suppliers_list.append(supp_dict)
                 
-            # Sort by spend to identify volume, but we will pick exactly 1 preferred based on active contract price/risk
             active_supps = [s for s in suppliers_list if s['contract']['status'] in ['Active', 'Expiring Soon'] and s['contract']['value']]
             if active_supps:
-                # Score them (lower is better): Price + (Price * Risk * 0.05)
                 for s in active_supps:
                     price = float(s['contract']['value'])
                     risk = s['compliance_risk']
                     s['score'] = price + (price * risk * 0.05)
                 active_supps = sorted(active_supps, key=lambda x: x['score'])
                 
-                # Set all to not preferred initially
                 for s in suppliers_list: s['is_preferred'] = False
                 
-                # Set exactly the top 1 to preferred
                 best_supp_id = active_supps[0]['supplier_id']
                 for s in suppliers_list:
                     if s['supplier_id'] == best_supp_id:
                         s['is_preferred'] = True
                         preferred_suppliers.append(s)
             else:
-                # If no active contracts, fallback to historical preferability but limit to 1 based on spend
                 prefs = [s for s in suppliers_list if s['is_preferred']]
                 for s in suppliers_list: s['is_preferred'] = False
                 if prefs:
@@ -321,7 +369,6 @@ class DataEngine:
             "potential_savings": sum(x['estimated_savings'] for x in risk_and_consolidation)
         }
 
-        # ── NEW Buyer Behaviour: proper maverick-only leakage logic ──
         maverick_bb = df[df['Preferred Supplier Used'] == 'N'].copy()
         active_cc_bb = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE'][['Category L2', 'Contracted Unit Price']].drop_duplicates('Category L2').rename(columns={'Category L2': '_bb_cat', 'Contracted Unit Price': '_bb_price'})
         maverick_bb = maverick_bb.merge(active_cc_bb, left_on='Booked Category', right_on='_bb_cat', how='left')
@@ -353,41 +400,64 @@ class DataEngine:
         buyer_agg['pattern'] = buyer_agg.apply(bb_pattern, axis=1)
         buyer_agg = buyer_agg.sort_values('total_leakage', ascending=False)
 
-        # Enrich with last transaction details for mail auto-populate
         buyer_behavior = []
         for _, row in buyer_agg.iterrows():
             bid = row['Requester ID']
             b_rows = maverick_bb[maverick_bb['Requester ID'] == bid].sort_values('Invoice Date', ascending=False)
-            last_row = b_rows.iloc[0] if not b_rows.empty else None
-            # Contracted price for top category
-            top_cat = str(row['top_category'])
-            c_match = contracts_df[(contracts_df['Category L2'] == top_cat) & (contracts_df['is_active'].astype(str).str.upper() == 'TRUE')]
-            contracted_price = float(c_match.iloc[0]['Contracted Unit Price']) if not c_match.empty and pd.notna(c_match.iloc[0]['Contracted Unit Price']) else None
-            pref_id = c_match.iloc[0]['Supplier ID'] if not c_match.empty else None
-            pref_name = supplier_name_map.get(pref_id, 'Contracted Supplier') if pref_id else 'Contracted Supplier'
+            
+            off_system_txns = b_rows[b_rows['Payment Method'].isin(['P-Card', 'Direct', 'Petty Cash'])]
+            maverick_txns = b_rows[b_rows['has_contract'] & (b_rows['Preferred Supplier Used'] == 'N')]
+            
+            if not off_system_txns.empty:
+                buyer_type = "Off-System"
+                recent_count = len(off_system_txns[off_system_txns['Invoice Date'] >= (df['Invoice Date'].max() - pd.Timedelta(days=30))])
+                pattern = "Purchase made outside procurement system"
+                if recent_count > 0: pattern += f" ({recent_count} in last 30 days)"
+            elif not maverick_txns.empty:
+                buyer_type = "Maverick"
+                recent_count = len(maverick_txns[maverick_txns['Invoice Date'] >= (df['Invoice Date'].max() - pd.Timedelta(days=30))])
+                pattern = "Off-contract purchase despite available supplier"
+                if recent_count > 0: pattern += f" ({recent_count} in last 30 days)"
+            else:
+                buyer_type = "Maverick"
+                pattern = "Occasional Leakage"
+            
+            context_row = b_rows.iloc[0] if not b_rows.empty else pd.Series()
+            
             buyer_behavior.append({
                 "buyer_name": str(bid),
                 "plant": str(b_rows['plant'].mode().iloc[0]) if not b_rows.empty else 'N/A',
                 "off_contract_buys": int(row['off_contract_buys']),
-                "total_off_contract": float(row['total_off_contract']),
-                "leakage": float(row['total_leakage']),
+                "total_txns": int(len(b_rows)),
+                "top_category": str(row['top_category']),
                 "avg_leakage_per_buy": float(row['avg_leakage_per_buy']),
-                "categories_impacted": int(row['categories_impacted']),
-                "top_category": top_cat,
-                "dominant_payment": str(row['dominant_payment']),
-                "dominant_po_type": str(row['dominant_po_type']),
-                "pattern": str(row['pattern']),
-                "total_txns": int(len(df[df['Requester ID'] == bid])),
-                # For mail auto-populate
-                "last_supplier": str(last_row['Supplier Name Raw']) if last_row is not None else '',
-                "last_invoice_date": last_row['Invoice Date'].strftime('%d-%b-%Y') if last_row is not None and pd.notna(last_row.get('Invoice Date')) else '',
-                "last_amount": float(last_row['Amount']) if last_row is not None else 0,
-                "last_leakage": float(last_row['leakage_bb']) if last_row is not None else 0,
-                "contracted_price": contracted_price,
-                "preferred_supplier": pref_name
+                "leakage": float(row['total_leakage']),
+                "pattern": pattern,
+                "buyer_type": buyer_type,
+                "last_category": str(context_row.get('Booked Category', 'General')),
+                "last_amount": float(context_row.get('Amount', 0)),
+                "last_leakage": float(context_row.get('leakage_bb', 0)),
+                "last_payment_method": str(context_row.get('Payment Method', 'P-Card')),
+                "last_supplier": str(context_row.get('Supplier Name Raw', 'Unknown'))
             })
-        # Keep top 20 for table
         buyer_behavior = sorted(buyer_behavior, key=lambda x: x['leakage'], reverse=True)[:20]
+
+        if buyer_behavior:
+            top_buyer = buyer_behavior[0]
+            total_leakage_bb = sum(b['leakage'] for b in buyer_behavior)
+            top_3_leakage = sum(b['leakage'] for b in buyer_behavior[:3])
+            concentration = (top_3_leakage / total_leakage_bb * 100) if total_leakage_bb > 0 else 0
+            
+            main_type = max(set(b['buyer_type'] for b in buyer_behavior), key=[b['buyer_type'] for b in buyer_behavior].count)
+            top_cat_bb = max(set(b['top_category'] for b in buyer_behavior), key=[b['top_category'] for b in buyer_behavior].count)
+            
+            action = "restrict P-Card use" if main_type == "Off-System" else "enforce contract approvals"
+            insight = f"Top 3 buyers cause {concentration:.0f}% of leakage. Most issues are {main_type} violations in {top_cat_bb}. Action: {action}."
+        else:
+            insight = "No significant leakage patterns detected among buyers this period."
+        
+        # Finally, recurring tail and pooling results
+        # ... logic continues to return them ...
 
         department_compliance = []
         for dept, dgroup in df.groupby('dept'):
@@ -459,7 +529,6 @@ class DataEngine:
         high_risk_df = df[df['Supplier ID'].isin(high_risk_sids)]
         comp_alerts = sorted(holds, key=lambda x: x['amount'], reverse=True)[:10]
 
-        # Store properties for Endpoints
         self.kpis_data = {
             "total_tail_spend": total_tail_spend, "total_spend": total_spend,
             "tail_spend_pct": total_tail_spend / total_spend if total_spend > 0 else 0,
@@ -469,7 +538,6 @@ class DataEngine:
         }
         self.root_causes = df[df['is_tail']].groupby('root_cause').agg(total_amount=('Amount', 'sum'), transaction_count=('Invoice ID', 'count')).reset_index().sort_values('total_amount', ascending=False).to_dict(orient='records')
         
-        # L1 Category Aggregation for Admin Dashboard Tail Spend Table
         l1_summary_dict = {}
         for x in category_suppliers_extended:
             l1 = l2_to_l1_map.get(x['category'], x['category'])
@@ -484,14 +552,12 @@ class DataEngine:
             self.category_analysis_summary.append({"category": l1, "tail_spend": data['tail_spend'], "tail_pct": pct})
         self.category_analysis_summary = sorted(self.category_analysis_summary, key=lambda k: k['tail_spend'], reverse=True)[:5]
         
-        # New: Top Spends by Category (Overall)
         top_spends = df.groupby('Booked Category')['Amount'].sum().reset_index().sort_values('Amount', ascending=False).head(20)
         self.top_spends_category = [{"category": row['Booked Category'], "amount": float(row['Amount'])} for _, row in top_spends.iterrows()]
 
         active_cats = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE']['Category L2'].unique()
         contract_gap_savings = sum(cat['tail_spend'] * 0.15 for cat in category_suppliers_extended if cat['category'] not in active_cats)
         
-        # ── NEW Savings Leakage: use correct maverick-only leakage logic ──
         maverick_df_sl = df[df['Preferred Supplier Used'] == 'N'].copy()
         active_cc_sl = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE'][['Category L2', 'Contracted Unit Price']].drop_duplicates('Category L2').rename(columns={'Category L2': '_sl_cat', 'Contracted Unit Price': '_sl_price'})
         maverick_df_sl = maverick_df_sl.merge(active_cc_sl, left_on='Booked Category', right_on='_sl_cat', how='left')
@@ -501,7 +567,6 @@ class DataEngine:
         total_maverick_leakage = float(maverick_df_sl['leakage_sl'].sum())
         off_contract_txn_count = int(len(maverick_df_sl))
 
-        # Root cause for maverick rows
         def maverick_root_cause(row):
             if row.get('PO Type', '') == 'emergency':
                 return 'Emergency bypass'
@@ -512,11 +577,9 @@ class DataEngine:
             else:
                 return 'Spot buy'
         maverick_df_sl['mav_root_cause'] = maverick_df_sl.apply(maverick_root_cause, axis=1)
-        # Fix: biggest root cause = by highest LEAKAGE, not by transaction count
         rc_leakage_totals = maverick_df_sl.groupby('mav_root_cause')['leakage_sl'].sum()
         biggest_root_cause = rc_leakage_totals.idxmax() if not rc_leakage_totals.empty else 'N/A'
 
-        # Recommended action logic
         def recommended_action(leakage_val, root_cause_val, category_val):
             if leakage_val > 1_000_000:
                 return f'CRITICAL: Block non-preferred POs in {category_val}. ₹{leakage_val:,.0f} leaked.'
@@ -540,7 +603,6 @@ class DataEngine:
             'Direct payment':    'Payment made directly to vendor, fully off-system and off-contract.'
         }
 
-        # Category wise leakage (enhanced)
         cat_leakage_agg = maverick_df_sl.groupby('Booked Category').agg(
             leakage=('leakage_sl', 'sum'),
             txn_count=('Amount', 'count'),
@@ -559,7 +621,6 @@ class DataEngine:
                 'action': action
             })
 
-        # Plant wise leakage (enhanced)
         plant_leakage_agg = maverick_df_sl.copy()
         plant_leakage_agg['plant'] = plant_leakage_agg['Cost Centre'].str.split('-').str[0]
         plant_leakage_grouped = plant_leakage_agg.groupby('plant').agg(
@@ -580,7 +641,6 @@ class DataEngine:
                 'action': action
             })
 
-        # Root cause leakage table
         rc_agg = maverick_df_sl.groupby('mav_root_cause').agg(
             leakage=('leakage_sl', 'sum'),
             txn_count=('Amount', 'count')
@@ -598,7 +658,6 @@ class DataEngine:
                 'recommended_fix': root_cause_fix_map.get(rc, 'Review and implement category-level controls.')
             })
 
-        # Live alert feed: last 10 maverick transactions sorted by Invoice Date desc
         maverick_df_sl_dated = maverick_df_sl.copy()
         maverick_df_sl_dated['Invoice Date'] = pd.to_datetime(maverick_df_sl_dated['Invoice Date'], errors='coerce')
         live_alerts = maverick_df_sl_dated.sort_values('Invoice Date', ascending=False).head(10)
@@ -630,7 +689,6 @@ class DataEngine:
         }
         self.plant_analysis = df.groupby('plant').apply(lambda x: pd.Series({"tail_spend": float(x[x['is_tail']]['Amount'].sum()), "tail_pct": min(float(x[x['is_tail']]['Amount'].sum()) / float(x['Amount'].sum()) * 100, 100) if x['Amount'].sum() > 0 else 0, "most_frequent_root_cause": x[x['is_tail']]['root_cause'].mode().iloc[0] if not x[x['is_tail']].empty else "N/A"})).reset_index().sort_values('tail_spend', ascending=False).to_dict(orient='records')
         
-        # Agent Insights Logic for Category Suppliers
         total_tracked = len(category_suppliers_extended)
         categories_with_contracts = categories_with_contract_count
         categories_no_contracts = total_tracked - categories_with_contracts
@@ -639,15 +697,13 @@ class DataEngine:
         strategies = []
         
         for cat in category_suppliers_extended:
-            # Check expiring
             if any(s['contract']['status'] == 'Expiring Soon' for s in cat['suppliers']):
                 expiring_count += 1
                 
-            # Generate insights
             has_contract = any(s['contract']['status'] in ['Active', 'Expiring Soon'] for s in cat['suppliers'])
             supp_count = len(cat['suppliers'])
             
-            if not has_contract and cat['total_spend'] > 1000000: # 10 Lakhs+ spend, 0 contracts
+            if not has_contract and cat['total_spend'] > 1000000:
                 strategies.append({
                     "type": "Uncontracted Target",
                     "priority": "High",
@@ -655,7 +711,7 @@ class DataEngine:
                     "text": f"{cat['category']} — ₹{cat['total_spend']/100000:.1f}L spent, 0 contracts. {supp_count} different suppliers used this year. Single largest uncontracted category. Agent recommends: run RFQ with top 3 by volume."
                 })
             elif supp_count >= 5 and cat['tail_pct'] > 0.6:
-                est_sav = cat['total_spend'] * 0.12 # 12% est savings
+                est_sav = cat['total_spend'] * 0.12
                 strategies.append({
                     "type": "Consolidation Target",
                     "priority": "Medium",
@@ -693,7 +749,6 @@ class DataEngine:
             "invoice_holds": holds[:50]
         }
         
-        # Save mapping for semantic classification
         self.taxonomy_mapping = df.dropna(subset=['Item Description', 'Booked Category'])[['Item Description', 'Booked Category']].drop_duplicates()
         self.taxonomy_mapping['Item Description'] = self.taxonomy_mapping['Item Description'].str.lower()
         self.p80_map = p80_map
@@ -733,7 +788,6 @@ class DataEngine:
         total_leakage_all = sum(b['leakage'] for b in bb)
         avg_leakage_per_buyer = total_leakage_all / total_maverick_buyers if total_maverick_buyers > 0 else 0
         
-        # Compute insight stats from ALL maverick buyers
         all_buyer_leakage = buyer_agg['leakage'].sum() if not buyer_agg.empty else 0
         all_buyer_count = len(buyer_agg)
         top10_leakage = buyer_agg.nlargest(10, 'leakage')['leakage'].sum() if not buyer_agg.empty else 0
@@ -761,12 +815,223 @@ class DataEngine:
     def get_compliance(self):
         return {"compliance": self.compliance_obj}
 
-    def classify_purchase(self, description):
-        desc_lower = str(description).lower()
-        predicted_l2 = None
-        predicted_l1 = None
+    def get_contract_decisions(self):
+        df = self.df_main.copy()
         
-        # Improved NLP classification using TF-IDF cosine similarity
+        pcard_variants = ["P-Card", "Direct", "Petty Cash", "PCard", "p-card", "direct", "petty cash"]
+        
+        po_col = 'PO Number' if 'PO Number' in df.columns else 'Invoice ID' 
+        pm_col = 'Payment Method' if 'Payment Method' in df.columns else 'PO Type'
+        
+        mask = (df[po_col].isna()) | (df[pm_col].str.strip().str.lower().isin([v.lower() for v in pcard_variants]))
+        filtered_df = df[mask].copy()
+        
+        contracts = self.contracts_df_raw.copy()
+        today = pd.Timestamp.now()
+        
+        active_cats = set(contracts[
+            (contracts['is_active'].astype(str).str.upper() == 'TRUE') &
+            (pd.to_datetime(contracts['Contract End Date'], errors='coerce') > today)
+        ]['Category L2'].unique())
+        
+        filtered_df = filtered_df[~filtered_df['Booked Category'].isin(active_cats)]
+        
+        agg = filtered_df.groupby('Booked Category').agg(
+            total_spend=('Amount', 'sum'),
+            txn_count=('Amount', 'count'),
+            supplier_count=('Supplier ID', 'nunique')
+        ).reset_index()
+        
+        agg = agg[(agg['txn_count'] >= 5) & (agg['total_spend'] > 100000)]
+        
+        results = []
+        supp_master = self.supp_df_raw.copy()
+        
+        for _, row in agg.iterrows():
+            cat = row['Booked Category']
+            cat_suppliers = filtered_df[filtered_df['Booked Category'] == cat]['Supplier ID'].unique()
+            
+            pref_exists = not supp_master[
+                (supp_master['SupplierID'].isin(cat_suppliers)) & 
+                (supp_master['is_preferred'].astype(str).str.upper().isin(['Y', 'TRUE', 'YES', '1']))
+            ].empty
+            
+            action_type = "Create Contract" if (row['supplier_count'] <= 5 and pref_exists) else "Run RFQ"
+            
+            if action_type == "Create Contract":
+                reason = "Consistent suppliers observed with stable buying pattern"
+            else:
+                reason = "High supplier fragmentation, no clear supplier dominance"
+                
+            results.append({
+                'category': str(cat),
+                'spend': float(row['total_spend']),
+                'suppliers': int(row['supplier_count']),
+                'action_type': action_type,
+                'reason': reason
+            })
+            
+        return sorted(results, key=lambda x: x['spend'], reverse=True)
+
+    def get_catalog(self):
+        try:
+            if self.contracts_df_raw is None or self.contracts_df_raw.empty:
+                return []
+                
+            catalog_df = self.contracts_df_raw.copy()
+            taxonomy = self.category_taxonomy_df.copy() if hasattr(self, 'category_taxonomy_df') else pd.DataFrame()
+            suppliers = self.supp_df_raw.copy() if hasattr(self, 'supp_df_raw') else pd.DataFrame()
+            
+            # Normalize column names for merging
+            for col in ['Category L2', 'Category_L2', 'L2']:
+                if col in catalog_df.columns:
+                    catalog_df = catalog_df.rename(columns={col: 'Category_L2'})
+                    break
+            
+            for col in ['Supplier ID', 'SupplierID', 'Supplier_ID']:
+                if col in catalog_df.columns:
+                    catalog_df = catalog_df.rename(columns={col: 'SupplierID'})
+                    break
+            
+            if 'Category_L1' not in catalog_df.columns:
+                if not taxonomy.empty and 'L2' in taxonomy.columns and 'L1' in taxonomy.columns:
+                    tax_map = taxonomy[['L1', 'L2']].drop_duplicates().rename(columns={'L1': 'Category_L1', 'L2': 'Category_L2'})
+                    if 'Category_L2' in catalog_df.columns:
+                        catalog_df = pd.merge(catalog_df, tax_map, on='Category_L2', how='left')
+                    else:
+                        catalog_df['Category_L1'] = 'General'
+                else:
+                    catalog_df['Category_L1'] = 'General'
+            
+            if 'Supplier_Name' not in catalog_df.columns:
+                s_name_col = next((c for c in ['Supplier Name', 'Supplier Name Raw', 'SupplierName'] if c in suppliers.columns), None)
+                if s_name_col and 'SupplierID' in suppliers.columns and 'SupplierID' in catalog_df.columns:
+                    supp_map = suppliers[['SupplierID', s_name_col]].rename(columns={s_name_col: 'Supplier_Name'})
+                    catalog_df = pd.merge(catalog_df, supp_map, on='SupplierID', how='left')
+                else:
+                    catalog_df['Supplier_Name'] = catalog_df['SupplierID'] if 'SupplierID' in catalog_df.columns else 'Unknown'
+            
+            today = pd.Timestamp.now()
+            if 'Contract End Date' in catalog_df.columns:
+                catalog_df['Contract End Date'] = pd.to_datetime(catalog_df['Contract End Date'], errors='coerce')
+                catalog_df['is_under_contract'] = (
+                    (catalog_df['is_active'].astype(str).str.upper() == 'TRUE') & 
+                    (catalog_df['Contract End Date'] > today)
+                )
+            else:
+                catalog_df['is_under_contract'] = True
+
+            results = []
+            moq_col = next((c for c in ['Minimum Order Qty', 'Min Order Qty', 'MOQ'] if c in catalog_df.columns), 'MOQ')
+            price_col = next((c for c in ['Contracted Unit Price', 'Unit Price', 'Price'] if c in catalog_df.columns), 'Price')
+            desc_col = next((c for c in ['Item Description', 'Description', 'Item'] if c in catalog_df.columns), 'Item Description')
+            sku_col = next((c for c in ['Item SKU', 'SKU'] if c in catalog_df.columns), 'Item SKU')
+            
+            for _, row in catalog_df.iterrows():
+                results.append({
+                    'item_description': str(row.get(desc_col, '')) if pd.notna(row.get(desc_col)) else '',
+                    'sku': str(row.get(sku_col, '')) if pd.notna(row.get(sku_col)) else '',
+                    'l1': str(row.get('Category_L1', 'General')) if pd.notna(row.get('Category_L1')) else 'General',
+                    'l2': str(row.get('Category_L2', 'General')) if pd.notna(row.get('Category_L2')) else 'General',
+                    'price': self._safe_float(row.get(price_col)),
+                    'moq': self._safe_int(row.get(moq_col)),
+                    'supplier_id': str(row.get('SupplierID', '')) if pd.notna(row.get('SupplierID')) else '',
+                    'supplier_name': str(row.get('Supplier_Name', '')) if pd.notna(row.get('Supplier_Name')) else '',
+                    'is_under_contract': bool(row.get('is_under_contract', False)),
+                    'is_new': False
+                })
+                
+            # Add newly added items
+            for item in self.newly_added_catalog:
+                item_copy = item.copy()
+                item_copy['is_new'] = True
+                results.append(item_copy)
+                
+            return results
+        except Exception as e:
+            print(f"Error in get_catalog: {e}")
+            return []
+
+    def add_to_catalog(self, item_data):
+        new_item = {
+            'item_description': str(item_data.get('description', '')),
+            'sku': f"NEW-{len(self.newly_added_catalog) + 1000}",
+            'l1': str(item_data.get('l1', 'General')),
+            'l2': str(item_data.get('l2', 'General')),
+            'price': float(item_data.get('price', 0)),
+            'moq': int(item_data.get('moq', 1)),
+            'supplier_id': str(item_data.get('supplier_id', '')),
+            'supplier_name': f"Supplier {item_data.get('supplier_id')}",
+            'is_under_contract': True,
+            'is_new': True,
+            'added_at': datetime.now().isoformat()
+        }
+        self.newly_added_catalog.append(new_item)
+        return {"status": "success", "data": new_item}
+
+    def get_catalog_items(self):
+        catalog_list = []
+        for c in self.contracts_df_raw.to_dict(orient='records'):
+            catalog_list.append({
+                'description': c.get('Item Description'),
+                'l1': c.get('Category L1', 'General'),
+                'l2': c.get('Category L2', 'General'),
+                'price': float(c.get('Contracted Unit Price', 0)),
+                'moq': c.get('Minimum Order Qty', 1),
+                'supplier_id': c.get('Supplier ID'),
+                'is_new': False
+            })
+            
+        for item in self.newly_added_catalog:
+            item_copy = item.copy()
+            item_copy['is_new'] = True
+            catalog_list.append(item_copy)
+            
+        return catalog_list
+
+
+    def get_catalog_recommendations(self):
+        if self.demand_patterns_df is None or self.demand_patterns_df.empty:
+            return []
+            
+        dp = self.demand_patterns_df.copy()
+        cc = self.contracts_df_raw.copy()
+        
+        active_skus = cc[cc['is_active'].astype(str).str.upper() == 'TRUE']['Item SKU'].unique()
+        uncontracted = dp[~dp['Item SKU'].isin(active_skus)].copy()
+        
+        repeat_buys = uncontracted[uncontracted['Reorder Frequency Days'] <= 60].copy()
+        
+        if self.spend_df is not None and not self.spend_df.empty:
+            price_map = self.spend_df.groupby('Item SKU')['unit_price_paid'].median().to_dict()
+            desc_map = self.spend_df.groupby('Item SKU')['Item Description'].first().to_dict()
+        else:
+            price_map = {}
+            desc_map = {}
+            
+        results = []
+        for _, row in repeat_buys.iterrows():
+            sku = row['Item SKU']
+            price = price_map.get(sku, 100)
+            desc = desc_map.get(sku, f"SKU: {sku}")
+            forecast_90d = row.get('Forecast Qty Next 90 Days', 0)
+            
+            est_savings = forecast_90d * price * 0.07
+            
+            if est_savings > 5000:
+                results.append({
+                    'sku': sku,
+                    'description': desc,
+                    'forecast_qty': int(forecast_90d),
+                    'frequency': float(row['Reorder Frequency Days']),
+                    'potential_savings': float(est_savings),
+                    'est_spend': float(forecast_90d * price)
+                })
+                
+        return sorted(results, key=lambda x: x['potential_savings'], reverse=True)[:15]
+
+    def classify_purchase(self, description):
+        desc_lower = description.lower()
         predicted_l2 = None
         predicted_l1 = None
         best_score = 0.0
@@ -804,19 +1069,38 @@ class DataEngine:
             except Exception:
                 pass
 
-        # Word-overlap fallback if sklearn not available or score too low
+        # Improved Contextual & Keyword matching
         if not predicted_l2 and hasattr(self, 'category_taxonomy_df') and not self.category_taxonomy_df.empty:
             best_match_score = 0
             desc_words = set(desc_lower.split())
+            
             for _, row in self.category_taxonomy_df.iterrows():
                 l1 = str(row.get('L1', ''))
                 l2 = str(row.get('L2', ''))
-                if not l2 or l2 == 'nan': continue
-                tax_text = ' '.join([l2, str(row.get('Description', '')), str(row.get('Keywords', ''))]).lower()
-                tax_words = set(tax_text.split())
-                intersect = len(desc_words.intersection(tax_words))
-                if intersect > best_match_score:
-                    best_match_score = intersect
+                if not l2 or l2.lower() == 'nan': continue
+                
+                # Priority 1: Exact L2 name match in description
+                if l2.lower() in desc_lower:
+                    predicted_l2 = l2
+                    predicted_l1 = l1
+                    break
+                
+                # Priority 2: Keyword match from taxonomy
+                keywords = str(row.get('Keywords', '')).lower()
+                keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
+                if any(kw in desc_lower for kw in keyword_list):
+                    predicted_l2 = l2
+                    predicted_l1 = l1
+                    break
+                    
+                # Priority 3: Contextual overlap (L2 name + description + keywords)
+                tax_desc = str(row.get('Description', '')).lower()
+                context_text = f"{l2} {tax_desc} {keywords}".lower()
+                context_words = set(context_text.split())
+                
+                overlap = len(desc_words.intersection(context_words))
+                if overlap > best_match_score:
+                    best_match_score = overlap
                     predicted_l2 = l2
                     predicted_l1 = l1
         
@@ -860,9 +1144,9 @@ class DataEngine:
             s_match = self.supp_df_raw[self.supp_df_raw['SupplierID'] == sid]
             
             s_name = str(s_match['Supplier Name'].iloc[0]) if not s_match.empty and 'Supplier Name' in s_match.columns else sid
-            r_score = float(s_match['Compliance Risk '].iloc[0]) if not s_match.empty and 'Compliance Risk ' in s_match.columns else 0.0
+            r_score = self._safe_float(s_match['Compliance Risk '].iloc[0]) if not s_match.empty and 'Compliance Risk ' in s_match.columns else 0.0
             
-            price = float(c_row['Contracted Unit Price'])
+            price = self._safe_float(c_row.get('Contracted Unit Price'))
             # Score: lower is better. Price + penalty for risk
             score = price + (price * (r_score * 0.05))
             
@@ -870,7 +1154,7 @@ class DataEngine:
                 "supplier_id": sid,
                 "supplier_name": s_name,
                 "contracted_price": price,
-                "moq": int(c_row.get('Minimum Order Qty', 1)),
+                "moq": self._safe_int(c_row.get('Minimum Order Qty')),
                 "risk_score": r_score,
                 "score": score
             })
@@ -903,74 +1187,180 @@ class DataEngine:
     def get_purchase_history(self):
         return self.mock_po_history
     def get_demand_forecast(self):
-        dp = self.demand_patterns_df.copy()
-        cc = self.contracts_df_raw.copy()
-        df = self.df_main.copy()
+        dp = self.demand_patterns_df.copy() if self.demand_patterns_df is not None else pd.DataFrame()
+        cc = self.contracts_df_raw.copy() if self.contracts_df_raw is not None else pd.DataFrame()
+        taxonomy = self.category_taxonomy_df.copy() if self.category_taxonomy_df is not None else pd.DataFrame()
+        suppliers = self.supp_df_raw.copy() if self.supp_df_raw is not None else pd.DataFrame()
+        df_main = self.spend_df.copy() if self.spend_df is not None else pd.DataFrame()
 
-        # KPIs
+        if dp.empty or cc.empty or taxonomy.empty or suppliers.empty:
+            return {"kpis": {"predicted_tail_30d": 0, "pool_opportunities": 0, "seasonal_items": 0, "recurring_tail_needing_contract": 0}, "pooling_opportunities": [], "recurring_tail_items": [], "seasonal_items": []}
+
         # 1. Predicted tail spend (30d)
-        # Rolling 30d avg of tail spend * 1.05 trend factor
-        tail_df = df[df['is_tail']].copy()
-        if not tail_df.empty:
-            today = tail_df['Invoice Date'].max()
-            last_30 = tail_df[tail_df['Invoice Date'] >= (today - pd.Timedelta(days=30))]
-            predicted_tail_30d = float(last_30['Amount'].sum() * 1.05)
-        else:
-            predicted_tail_30d = 0
+        predicted_tail_30d = 0
+        if not df_main.empty:
+            tail_df = df_main[df_main['is_tail']].copy()
+            if not tail_df.empty:
+                today = tail_df['Invoice Date'].max()
+                last_30 = tail_df[tail_df['Invoice Date'] >= (today - pd.Timedelta(days=30))]
+                predicted_tail_30d = float(last_30['Amount'].sum() * 1.05)
 
-        # Section 1: Cross-BU demand pooling
-        # SKUs where Reorder Frequency Days <= 30 AND Plant ID count >= 2
-        pool = dp[dp['Reorder Frequency Days'] <= 30].groupby('Item SKU').agg(
-            plant_count      = ('Plant ID', 'nunique'),
-            total_forecast   = ('Forecast Qty Next 90 Days', 'sum'),
-            avg_reorder_freq = ('Reorder Frequency Days', 'mean'),
-            avg_lead_time    = ('Lead Time Days', 'mean'),
-            plants           = ('Plant ID', lambda x: list(x.unique()))
+        # 2. Identify Pool Opportunities & Aggregate Demand
+        # Map columns dynamically
+        def find_col(cols, target):
+            # Try exact match first
+            for c in cols:
+                if c.lower() == target.lower(): return c
+            # Try underscore/space agnostic
+            for c in cols:
+                if c.replace(" ", "_").lower() == target.lower(): return c
+            # Try partial match
+            for c in cols:
+                if target.lower() in c.lower(): return c
+            return None
+
+        sku_col_dp = find_col(dp.columns, 'item_sku') or 'Item SKU'
+        plant_col_dp = find_col(dp.columns, 'plant_id') or 'Plant ID'
+        qty_col_dp = find_col(dp.columns, 'forecast_qty_next90d') or find_col(dp.columns, 'forecast') or 'Forecast Qty Next 90 Days'
+        freq_col_dp = find_col(dp.columns, 'reorder_frequency_days') or find_col(dp.columns, 'reorder') or 'Reorder Frequency Days'
+
+        # Check if required columns exist
+        if sku_col_dp not in dp.columns or plant_col_dp not in dp.columns:
+            return {"kpis": {"predicted_tail_30d": predicted_tail_30d, "pool_opportunities": 0, "seasonal_items": 0, "recurring_tail_needing_contract": 0}, "pooling_opportunities": [], "recurring_tail_items": [], "seasonal_items": []}
+
+        pool_base = dp.groupby(sku_col_dp).agg(
+            plant_count=(plant_col_dp, 'nunique'),
+            total_qty=(qty_col_dp, 'sum') if qty_col_dp in dp.columns else (sku_col_dp, 'count'),
+            min_reorder_freq=(freq_col_dp, 'min') if freq_col_dp in dp.columns else (sku_col_dp, lambda x: 0),
+            avg_reorder_freq=(freq_col_dp, 'mean') if freq_col_dp in dp.columns else (sku_col_dp, lambda x: 0),
+            plants_list=(plant_col_dp, lambda x: list(x.unique()))
         ).reset_index()
+        
+        # Criteria: same item_sku across >= 2 plants AND reorder_frequency_days <= 60 (relaxed for more entries)
+        candidates = pool_base[(pool_base['plant_count'] >= 2) & (pool_base['min_reorder_freq'] <= 60)]
+        
+        pooling_results = []
+        for _, row in candidates.iterrows():
+            sku = row[sku_col_dp]
+            
+            # Distribution for plant-wise requirements
+            sku_rows = dp[dp[sku_col_dp] == sku]
+            plant_dist = sku_rows.set_index(plant_col_dp)[qty_col_dp].to_dict() if qty_col_dp in dp.columns else {p: 1 for p in row['plants_list']}
+            
+            # Map SKU to Category
+            sku_col_tax = find_col(taxonomy.columns, 'item_sku') or 'Item SKU'
+            cat_col_tax = find_col(taxonomy.columns, 'category_l2') or 'Category_L2'
+            
+            l2 = None
+            if sku_col_tax in taxonomy.columns and cat_col_tax in taxonomy.columns:
+                cat_match = taxonomy[taxonomy[sku_col_tax] == sku]
+                if not cat_match.empty:
+                    l2 = cat_match.iloc[0][cat_col_tax]
+            
+            # If not in taxonomy, try to find in contracts
+            if not l2:
+                sku_col_cc = find_col(cc.columns, 'item_sku') or 'Item SKU'
+                cat_col_cc = find_col(cc.columns, 'category_l2') or 'Category L2'
+                if sku_col_cc in cc.columns and cat_col_cc in cc.columns:
+                    c_match = cc[cc[sku_col_cc] == sku]
+                    if not c_match.empty:
+                        l2 = c_match.iloc[0][cat_col_cc]
+            
+            if not l2: continue
+            
+            # Fetch Contract Suppliers ONLY (Active)
+            cat_col_cc = find_col(cc.columns, 'category_l2') or 'Category L2'
+            contract_matches = cc[(cc[cat_col_cc] == l2) & (cc['is_active'].astype(str).str.upper() == 'TRUE')]
+            if contract_matches.empty: continue
+            
+            # Enrich Supplier Data
+            supp_list = []
+            sid_col_sm = find_col(suppliers.columns, 'supplier_id') or 'Supplier ID'
+            sname_col_sm = find_col(suppliers.columns, 'supplier_name') or 'Supplier_Name'
+            risk_col_sm = find_col(suppliers.columns, 'risk_score') or 'Risk_Score'
+            lt_col_sm = find_col(suppliers.columns, 'lead_time_days') or 'Lead_Time_Days'
+            
+            for _, c_row in contract_matches.iterrows():
+                sid_col_cc = find_col(cc.columns, 'supplier_id') or 'Supplier ID'
+                price_col_cc = find_col(cc.columns, 'contracted_unit_price') or 'Contracted Unit Price'
+                
+                sid = c_row[sid_col_cc]
+                s_master = suppliers[suppliers[sid_col_sm] == sid] if sid_col_sm in suppliers.columns else pd.DataFrame()
+                
+                sm = s_master.iloc[0] if not s_master.empty else pd.Series()
+                
+                price = float(c_row.get(price_col_cc, 0))
+                risk = float(sm.get(risk_col_sm, 5))
+                lead_time = float(sm.get(lt_col_sm, 7))
+                
+                supp_list.append({
+                    "supplier_id": sid,
+                    "supplier_name": str(sm.get(sname_col_sm, sid)),
+                    "price": price,
+                    "risk": risk,
+                    "lead_time": lead_time
+                })
+            
+            if not supp_list: continue
+            
+            # Weighted Scoring: (price_rank * 0.5) + (risk * 0.3) + (lead_time * 0.2)
+            # Price rank: lowest is 1
+            supp_list = sorted(supp_list, key=lambda x: x['price'])
+            for idx, s in enumerate(supp_list):
+                s['price_rank'] = idx + 1
+                
+            for s in supp_list:
+                s['score'] = (s['price_rank'] * 0.5) + (s['risk'] * 0.3) + (s['lead_time'] * 0.2)
+                
+            # Sort by score (lower is better)
+            supp_list = sorted(supp_list, key=lambda x: x['score'])
+            top_3 = supp_list[:3]
+            if top_3:
+                top_3[0]['is_recommended'] = True
 
-        pool = pool[pool['plant_count'] >= 2].sort_values('total_forecast', ascending=False)
-        
-        # Savings estimate: 10% price improvement from volume pooling
-        pool = pool.merge(cc[cc['is_active']==True][['Item SKU','Contracted Unit Price']], on='Item SKU', how='left')
-        pool['Contracted Unit Price'] = pd.to_numeric(pool['Contracted Unit Price'], errors='coerce').fillna(0)
-        pool['est_saving'] = pool['total_forecast'] * pool['Contracted Unit Price'] * 0.10
-        
-        # Only top 10 with savings > 0
-        pool = pool[pool['est_saving'] > 0].sort_values('est_saving', ascending=False).head(10)
-        
-        # Section 2: Recurring tail items that should be contracted
-        # items with Reorder Frequency <= 14 days
+            # Calculate savings based on best supplier vs avg price or previous price
+            best_price = top_3[0]['price']
+            avg_prev_price = df_main[df_main['Item SKU'] == sku]['unit_price_paid'].mean() if sku in df_main['Item SKU'].values else best_price * 1.15
+            est_saving = (avg_prev_price - best_price) * row['total_qty'] if avg_prev_price > best_price else 0
+
+            pooling_results.append({
+                "sku": sku,
+                "category": l2,
+                "total_qty": int(row['total_qty']),
+                "plants_list": row['plants_list'],
+                "plant_distribution": plant_dist,
+                "avg_reorder_freq": float(row['avg_reorder_freq']),
+                "est_saving": float(est_saving),
+                "top_suppliers": top_3
+            })
+            
+        # Top 10 by savings
+        pooling_results = sorted(pooling_results, key=lambda x: x['est_saving'], reverse=True)[:10]
+            
+        # Recurring Tail Items (Legacy support)
         fast_reorder = dp[dp['Reorder Frequency Days'] <= 14].groupby('Item SKU').agg(
-            forecast_qty  = ('Forecast Qty Next 90 Days', 'sum'),
-            plants_count  = ('Plant ID', 'nunique'),
-            plants_list   = ('Plant ID', lambda x: ", ".join(map(str, x.unique()))),
-            reorder_freq  = ('Reorder Frequency Days', 'mean')
+            forecast_qty=('Forecast Qty Next 90 Days', 'sum'),
+            plants_list=('Plant ID', lambda x: ", ".join(map(str, x.unique()))),
+            reorder_freq=('Reorder Frequency Days', 'mean')
         ).reset_index()
-
-        active_skus = cc[cc['is_active']==True]['Item SKU'].unique()
-        fast_reorder['has_contract'] = fast_reorder['Item SKU'].isin(active_skus)
-        fast_reorder['should_contract'] = ~fast_reorder['has_contract']
-
-        # Cross-check with tail spend (match on Item SKU)
-        tail_skus = df[df['is_tail']]['Item SKU'].unique()
-        fast_reorder['in_tail'] = fast_reorder['Item SKU'].isin(tail_skus)
-        
-        # Urgent: appears in tail AND has no contract
-        recurring_tail = fast_reorder[fast_reorder['should_contract'] & fast_reorder['in_tail']].copy()
+        active_skus = cc[cc['is_active'].astype(str).str.upper() == 'TRUE']['Item SKU'].unique()
+        fast_reorder['should_contract'] = ~fast_reorder['Item SKU'].isin(active_skus)
+        recurring_tail = fast_reorder[fast_reorder['should_contract']].head(10)
 
         # More KPIs
-        pool_opportunities_count = len(pool)
-        seasonal_items_count = len(dp[dp['is_seasonal'] == True]['Item SKU'].unique())
-        recurring_tail_count = len(recurring_tail)
+        total_skus = len(dp[sku_col_dp].unique()) if sku_col_dp in dp.columns else 0
+        contracted_skus = len(cc[cc['is_active'].astype(str).str.upper() == 'TRUE']['Item SKU'].unique()) if 'Item SKU' in cc.columns else 0
+        coverage_pct = (contracted_skus / total_skus * 100) if total_skus > 0 else 0
 
         return {
             "kpis": {
                 "predicted_tail_30d": predicted_tail_30d,
-                "pool_opportunities": pool_opportunities_count,
-                "seasonal_items": seasonal_items_count,
-                "recurring_tail_needing_contract": recurring_tail_count
+                "pool_opportunities": len(pooling_results),
+                "seasonal_items": len(dp[dp['is_seasonal'] == True]['Item SKU'].unique()) if 'is_seasonal' in dp.columns else 0,
+                "recurring_tail_needing_contract": len(recurring_tail),
+                "supplier_coverage_pct": float(coverage_pct)
             },
-            "pooling_opportunities": pool.fillna(0).to_dict('records'),
+            "pooling_opportunities": pooling_results,
             "recurring_tail_items": recurring_tail.fillna(0).to_dict('records'),
             "seasonal_items": dp[dp['is_seasonal'] == True].replace({np.nan: None}).to_dict('records')
         }

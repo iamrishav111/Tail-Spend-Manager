@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LogOut, TrendingUp, AlertOctagon, ShieldAlert, Package, Search, DollarSign, Users, AlertTriangle, ArrowUpRight, Loader, UserCheck, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Info, Send, X, CheckCircle, Mail, Zap, Filter, BarChart2, Activity } from 'lucide-react';
+import { LogOut, TrendingUp, AlertOctagon, ShieldAlert, Package, Search, DollarSign, Users, AlertTriangle, ArrowUpRight, Loader, UserCheck, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Info, Send, X, CheckCircle, Mail, Zap, Filter, BarChart2, Activity, ShieldCheck } from 'lucide-react';
 
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -34,31 +34,56 @@ const BuyerBehaviourTab = ({ data, formatCurrency }) => {
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const openMail = (buyer) => {
-    const contracted = buyer.contracted_price ? `₹${Number(buyer.contracted_price).toLocaleString('en-IN')}/unit` : 'N/A';
-    const amount = buyer.last_amount ? formatCurrency(buyer.last_amount) : 'N/A';
-    const leakage = buyer.last_leakage ? formatCurrency(buyer.last_leakage) : 'N/A';
-    const subject = encodeURIComponent(`Procurement Compliance Notice — Action Required: ${buyer.buyer_name}`);
-    const body = encodeURIComponent(`Dear ${buyer.buyer_name},
+    let subject, body;
+    const leakageStr = buyer.last_leakage ? Number(buyer.last_leakage).toLocaleString('en-IN') : '0';
+    
+    if (buyer.buyer_type === 'Maverick') {
+      subject = encodeURIComponent("Advisory: Purchase Outside Preferred Supplier");
+      body = encodeURIComponent(`Dear ${buyer.buyer_name},
 
-You bought ${buyer.top_category} from ${buyer.last_supplier || 'a non-preferred vendor'} on ${buyer.last_invoice_date || 'a recent date'} for ${amount}. Contracted price for that category is ${contracted}. Leakage on this order: ${leakage}.
+You recently made a purchase in ${buyer.last_category} outside the preferred supplier.
 
-You have made ${buyer.off_contract_buys} off-contract purchase(s) in this category. Your total leakage is ${formatCurrency(buyer.leakage)}.
+Recommended:
+• Use preferred supplier for better pricing and compliance
+• Contract pricing is already available
 
-Next time, please use: ${buyer.preferred_supplier || 'the contracted supplier'}.
+Estimated impact:
+₹${leakageStr} potential savings missed
 
-This is an automated nudge from the Tail Spend Control Tower. Please reach out to your procurement team for clarification.
+Please ensure future purchases follow preferred supplier guidelines.
 
 Regards,
-Procurement Compliance Team`);
+Procurement Team`);
+    } else {
+      // Off-System
+      subject = encodeURIComponent("Compliance Notice: Purchase Made Outside Procurement System");
+      body = encodeURIComponent(`Dear ${buyer.buyer_name},
+
+You recently made a purchase using ${buyer.last_payment_method}, outside the standard procurement process.
+
+Impact:
+• Reduced visibility
+• No approval tracking
+• Potential pricing inefficiencies
+
+Recommended:
+• Route future purchases through the system
+• Use PO-based buying instead of direct payments
+
+This helps ensure compliance and cost optimization.
+
+Regards,
+Procurement Team`);
+    }
     
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };
 
   const patternBadgeClass = (p) => {
     if (p.includes('Repeat')) return 'badge-danger';
-    if (p.includes('Emergency')) return 'badge-warning';
-    if (p.includes('P-Card')) return 'badge-warning';
-    if (p.includes('Direct')) return 'badge-neutral';
+    if (p.includes('Multi')) return 'badge-warning';
+    if (p.includes('System')) return 'badge-warning';
+    if (p.includes('Process')) return 'badge-neutral';
     return 'badge-neutral';
   };
 
@@ -139,10 +164,9 @@ Procurement Compliance Team`);
               <tr>
                 <th>Buyer ID</th>
                 <th>Plant</th>
-                <th className="numeric">Off-Contract Buys</th>
+                <th>Buyer Type</th>
                 <th>Top Category</th>
                 <th className="numeric">Avg Leakage/Buy</th>
-                <th className="numeric">Total Leakage</th>
                 <th>Pattern</th>
                 <th className="text-center">Action</th>
               </tr>
@@ -155,10 +179,13 @@ Procurement Compliance Team`);
                 <tr key={i}>
                   <td className="font-bold text-primary text-sm">{b.buyer_name}</td>
                   <td className="text-secondary text-sm font-medium">{b.plant}</td>
-                  <td className="numeric font-semibold">{b.off_contract_buys} <span className="text-xs text-tertiary">/ {b.total_txns}</span></td>
+                  <td>
+                    <span className={`badge ${b.buyer_type === 'Maverick' ? 'badge-danger' : 'badge-warning'} text-xs font-bold`}>
+                      {b.buyer_type}
+                    </span>
+                  </td>
                   <td className="text-sm font-medium" style={{ maxWidth: '160px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.top_category}</td>
                   <td className="numeric font-bold text-warning">{formatCurrency(b.avg_leakage_per_buy)}</td>
-                  <td className="numeric font-bold text-danger text-base">{formatCurrency(b.leakage)}</td>
                   <td><span className={`badge ${patternBadgeClass(b.pattern)} text-xs`}>{b.pattern}</span></td>
                   <td className="text-center">
                     <button
@@ -410,6 +437,11 @@ const SavingsLeakageTab = ({ data, formatCurrency, renderBadge }) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
+// CATALOG TAB COMPONENT
+// ──────────────────────────────────────────────────────────────────────────────
+
+
+// ──────────────────────────────────────────────────────────────────────────────
 // ADMIN DASHBOARD MAIN COMPONENT
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -423,7 +455,8 @@ const AdminDashboard = () => {
     { name: 'Category Suppliers', slug: 'category-suppliers', endpoint: '/api/dashboard/category-suppliers', icon: <Package size={16} /> },
     { name: 'Consolidation', slug: 'consolidation', endpoint: '/api/dashboard/consolidation', icon: <AlertOctagon size={16} /> },
     { name: 'Demand Forecast', slug: 'demand-forecast', endpoint: '/api/dashboard/demand-forecast', icon: <TrendingUp size={16} /> },
-    { name: 'Buyer Behaviour', slug: 'buyer-behavior', endpoint: '/api/dashboard/buyer-behavior', icon: <UserCheck size={16} /> }
+    { name: 'Buyer Behaviour', slug: 'buyer-behavior', endpoint: '/api/dashboard/buyer-behavior', icon: <UserCheck size={16} /> },
+    { name: 'Purchase History', slug: 'purchase-history', endpoint: '/api/purchase-history', icon: <Package size={16} /> }
   ];
 
   const { tab: tabSlug } = useParams();
@@ -445,6 +478,12 @@ const AdminDashboard = () => {
   const [showMorePlants, setShowMorePlants] = useState(false);
   const [showMoreSpends, setShowMoreSpends] = useState(false);
   const [selectedActionCategory, setSelectedActionCategory] = useState(null);
+  const [selectedContractAction, setSelectedContractAction] = useState(null);
+  const [selectedCatalogAdd, setSelectedCatalogAdd] = useState(null);
+  const [classifying, setClassifying] = useState(false);
+  const [classificationResult, setClassificationResult] = useState(null);
+  const [contractDecisions, setContractDecisions] = useState([]);
+  const [catalogRecommendations, setCatalogRecommendations] = useState([]);
   const [rfqStatus, setRfqStatus] = useState(null); // null, 'sending', 'sent'
   const [consolidationPage, setConsolidationPage] = useState(1);
   const [categoryPage, setCategoryPage] = useState(1);
@@ -457,7 +496,10 @@ const AdminDashboard = () => {
 
   const [spendSearch, setSpendSearch] = useState('');
   const [spendSortCol, setSpendSortCol] = useState('amount');
+  const [selectedBuyItem, setSelectedBuyItem] = useState(null);
   const [spendSortDesc, setSpendSortDesc] = useState(true);
+  const [selectedPoolItem, setSelectedPoolItem] = useState(null);
+  const [selectedPoolSupplier, setSelectedPoolSupplier] = useState(null);
 
   const [plantPage, setPlantPage] = useState(1);
   const [spendPage, setSpendPage] = useState(1);
@@ -482,6 +524,20 @@ const AdminDashboard = () => {
           if (activeTab === 'Category Suppliers' && json.data.category_analysis?.length > 0) {
               setSelectedCategory(json.data.category_analysis[0].category);
           }
+          if (activeTab === 'Consolidation') {
+            try {
+              const resDec = await fetch(`${API_BASE_URL}/api/dashboard/contract-decisions`);
+              const jsonDec = await resDec.json();
+              if (jsonDec.status === 'success') {
+                setContractDecisions(jsonDec.data);
+              }
+              const resRec = await fetch(`${API_BASE_URL}/api/dashboard/catalog-recommendations`);
+              const jsonRec = await resRec.json();
+              if (jsonRec.status === 'success') {
+                setCatalogRecommendations(jsonRec.data);
+              }
+            } catch (e) { console.error(e); }
+          }
         } else {
           setError(json.message);
         }
@@ -499,6 +555,14 @@ const AdminDashboard = () => {
     if (value >= 100000) return `₹${(value / 100000).toFixed(2)} L`;
     if (value >= 1000) return `₹${(value / 1000).toFixed(1)} K`;
     return `₹${value}`;
+  };
+
+  const handleBuy = (item) => {
+    if (item.contract_flag) {
+      alert(`PO created successfully for ${item.name} at ${formatCurrency(item.price)} (Contracted Price)`);
+    } else {
+      setSelectedBuyItem(item);
+    }
   };
 
   const renderBadge = (status) => {
@@ -986,8 +1050,16 @@ const AdminDashboard = () => {
         const consKpis = dashboardData.kpis;
         
         return (
-          <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="flex flex-col gap-6 relative">
+            {/* Floating Quick Navigation */}
+            <div className="floating-nav">
+                <a href="#consolidation-kpis" className="floating-nav-item" data-label="KPI Overview"></a>
+                <a href="#supplier-consolidation" className="floating-nav-item" data-label="Supplier Consolidation"></a>
+                <a href="#contract-actions" className="floating-nav-item" data-label="Contract Actions"></a>
+                <a href="#catalog-recommendations" className="floating-nav-item" data-label="Catalog Recommendations"></a>
+                <a href="#agent-strategies" className="floating-nav-item" data-label="Agent Strategies"></a>
+            </div>
+            <div id="consolidation-kpis" className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="kpi-card kpi-card-primary p-4">
                 <div className="text-sm font-semibold text-primary mb-1">Categories Analyzed</div>
                 <div className="text-2xl font-bold">{consKpis.total_categories}</div>
@@ -1006,11 +1078,11 @@ const AdminDashboard = () => {
               </div>
             </div>
 
-            <div className="card p-0 overflow-hidden border-t-4 border-t-success">
+            <div id="supplier-consolidation" className="card p-0 overflow-hidden border-t-4 border-t-success">
                 <div className="p-4 border-b flex flex-wrap justify-between items-center bg-surface gap-4" style={{ borderColor: 'var(--color-border)' }}>
                     <div>
-                        <h2 className="mb-0 text-lg flex items-center gap-2 text-text font-bold"><AlertOctagon size={20} className="text-success" /> Category Consolidation</h2>
-                        <p className="text-xs text-secondary font-medium">Identify high potential targets for consolidation and RFQ events.</p>
+                        <h2 className="mb-0 text-lg flex items-center gap-2 text-text font-bold"><AlertOctagon size={20} className="text-success" /> Supplier Consolidation Opportunities</h2>
+                        <p className="text-xs text-secondary font-medium">Reduce supplier fragmentation by consolidating purchases with fewer, better suppliers.</p>
                     </div>
                     <div className="flex items-center gap-3">
                         <Search size={16} className="text-secondary" />
@@ -1064,6 +1136,109 @@ const AdminDashboard = () => {
                 </table>
                 </div>
             </div>
+
+            {/* Contract Actions (Table 2) */}
+            <div id="contract-actions" className="card p-0 overflow-hidden border-t-4 border-t-primary mt-6">
+                <div className="p-4 border-b bg-surface flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
+                    <div>
+                        <h2 className="mb-0 text-lg flex items-center gap-2 text-text font-bold"><Zap size={20} className="text-primary" /> Contract Actions</h2>
+                        <p className="text-xs text-secondary font-medium">Identify categories where creating a contract or running an RFQ can control future spend.</p>
+                    </div>
+                </div>
+                <div className="table-container border-none" style={{ borderRadius: 0 }}>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th className="numeric">Spend</th>
+                                <th className="numeric">Suppliers</th>
+                                <th className="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {contractDecisions.length === 0 && (
+                                <tr><td colSpan={4} className="text-center py-8 text-secondary">No recommendations found for this period.</td></tr>
+                            )}
+                            {contractDecisions.map((item, i) => (
+                                <tr key={i}>
+                                    <td className="font-semibold text-sm">{item.category}</td>
+                                    <td className="numeric font-bold text-primary">{formatCurrency(item.spend)}</td>
+                                    <td className="numeric font-medium">{item.suppliers}</td>
+                                    <td className="text-center">
+                                        <button 
+                                            className="btn btn-primary text-xs py-1.5 px-4 rounded-full font-bold"
+                                            style={{ backgroundColor: '#6d28d9' }}
+                                            onClick={() => setSelectedContractAction(item)}
+                                        >
+                                            Take Action
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+
+            {/* Contract Action Modal */}
+            {selectedContractAction && (
+                <>
+                    <div className="fixed inset-0 bg-black bg-opacity-40 z-[60] animate-fadeIn" onClick={() => setSelectedContractAction(null)}></div>
+                    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl z-[70] overflow-hidden animate-scaleIn">
+                        <div className="p-6 bg-surface border-b flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-text">Recommended Action</h2>
+                            <button onClick={() => setSelectedContractAction(null)} className="text-secondary hover:text-danger"><X size={24}/></button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-6">
+                            <div>
+                                <div className="text-xs font-bold text-secondary uppercase mb-2">Category</div>
+                                <div className="text-lg font-bold text-primary">{selectedContractAction.category}</div>
+                            </div>
+
+                            <div className="p-4 bg-primary-light rounded-lg border border-primary border-opacity-20">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <Zap size={18} className="text-primary"/>
+                                    <span className="font-bold text-primary">{selectedContractAction.action_type}</span>
+                                </div>
+                                <div className="text-sm font-medium text-secondary italic">
+                                    "{selectedContractAction.reason}"
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-3">
+                                <div className="text-xs font-bold text-secondary uppercase">Next Steps</div>
+                                <div className="text-sm text-text font-medium leading-relaxed">
+                                    {selectedContractAction.action_type === 'Create Contract' ? (
+                                        <ul className="list-disc pl-5 flex flex-col gap-1">
+                                            <li>Select top 2 preferred suppliers</li>
+                                            <li>Set baseline price using median historical price</li>
+                                            <li>Create contract draft</li>
+                                        </ul>
+                                    ) : (
+                                        <ul className="list-disc pl-5 flex flex-col gap-1">
+                                            <li>Invite 3–4 suppliers</li>
+                                            <li>Collect quotations</li>
+                                            <li>Recommend best supplier</li>
+                                        </ul>
+                                    )}
+                                </div>
+                            </div>
+
+                            <button 
+                                className="btn btn-primary w-full py-3 rounded-lg font-bold mt-4 shadow-lg"
+                                style={{ backgroundColor: '#6d28d9' }}
+                                onClick={() => {
+                                    alert(`${selectedContractAction.action_type} initiated for ${selectedContractAction.category}`);
+                                    setSelectedContractAction(null);
+                                }}
+                            >
+                                Proceed to {selectedContractAction.action_type}
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {/* RFQ Take Action Side Pane */}
             {selectedActionCategory && (
@@ -1230,7 +1405,7 @@ const AdminDashboard = () => {
                 </>
             )}
             {dashboardData.strategies && dashboardData.strategies.length > 0 && (
-                <div className="flex flex-col gap-3 mt-6">
+                <div id="agent-strategies" className="flex flex-col gap-3 mt-6">
                     {dashboardData.strategies.map((strat, i) => (
                         <div key={i} className={`alert-card ${strat.priority === 'High' ? 'alert-card-danger' : 'alert-card-warning'} flex items-start gap-3 p-4 border rounded-lg`}>
                             <AlertTriangle size={20} className="mt-0.5 flex-shrink-0" />
@@ -1239,13 +1414,151 @@ const AdminDashboard = () => {
                                     Agent Recommendation
                                     <span className={`badge ${strat.priority === 'High' ? 'badge-danger' : 'badge-warning'} text-[10px]`}>{strat.priority} Priority</span>
                                 </h4>
-                                <div className="text-sm font-medium leading-relaxed opacity-90">
+                                <div className="text-sm font-medium leading-relaxed">
                                     {strat.text}
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
+            )}
+
+            {/* Catalog Recommendations (Table 3) */}
+            <div id="catalog-recommendations" className="card p-0 overflow-hidden border-t-4 border-t-warning mt-6">
+                <div className="p-4 border-b bg-surface flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
+                    <div>
+                        <h2 className="mb-0 text-lg flex items-center gap-2 text-text font-bold"><TrendingUp size={20} className="text-warning" /> Catalog Recommendations</h2>
+                        <p className="text-xs text-secondary font-medium">Standardize frequently purchased items into a catalog for faster and consistent buying.</p>
+                    </div>
+                </div>
+                <div className="table-container border-none" style={{ borderRadius: 0 }}>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Item Description</th>
+                                <th className="numeric">Frequency (Days)</th>
+                                <th className="numeric">Forecast (90d)</th>
+                                <th className="numeric text-success">Potential Savings</th>
+                                <th className="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {catalogRecommendations.length === 0 && (
+                                <tr><td colSpan={5} className="text-center py-8 text-secondary">No catalogue recommendations found.</td></tr>
+                            )}
+                            {catalogRecommendations.map((item, i) => (
+                                <tr key={i}>
+                                    <td className="font-semibold text-sm max-w-[300px] truncate" title={item.description}>{item.description}</td>
+                                    <td className="numeric font-bold text-danger">{item.frequency.toFixed(0)} days</td>
+                                    <td className="numeric font-medium">{item.forecast_qty.toLocaleString()}</td>
+                                    <td className="numeric font-bold text-success">{formatCurrency(item.potential_savings)}</td>
+                                    <td className="text-center">
+                                        <button 
+                                            className="btn btn-primary text-xs py-1.5 px-4 rounded-full font-bold"
+                                            style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
+                                            onClick={async () => {
+                                                setSelectedCatalogAdd(item);
+                                                setClassifying(true);
+                                                const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+                                                try {
+                                                    const res = await fetch(`${API_BASE_URL}/api/classify-purchase`, {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ description: item.description })
+                                                    });
+                                                    const json = await res.json();
+                                                    setClassificationResult(json.data);
+                                                } finally { setClassifying(false); }
+                                            }}
+                                        >
+                                            Add to Catalog
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Add to Catalog Modal */}
+            {selectedCatalogAdd && (
+                <>
+                    <div className="fixed inset-0 bg-black bg-opacity-40 z-[60] animate-fadeIn" onClick={() => setSelectedCatalogAdd(null)}></div>
+                    <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl z-[70] overflow-hidden animate-scaleIn">
+                        <div className="p-6 bg-surface border-b flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-text">Standardize for Catalog</h2>
+                            <button onClick={() => setSelectedCatalogAdd(null)} className="text-secondary hover:text-danger"><X size={24}/></button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-6">
+                            <div>
+                                <div className="text-[10px] font-bold text-secondary uppercase mb-1">Item to Standardize</div>
+                                <div className="text-sm font-bold text-text">{selectedCatalogAdd.description}</div>
+                            </div>
+
+                            <div className="p-4 bg-primary-light rounded-xl border border-primary border-opacity-10">
+                                <h4 className="text-xs font-bold text-primary uppercase mb-3 flex items-center gap-2">
+                                    <ShieldCheck size={14}/> AI Classification Result
+                                </h4>
+                                {classifying ? (
+                                    <div className="flex items-center gap-2 text-secondary text-sm font-medium animate-pulse">
+                                        <Loader size={16} className="animate-spin" /> Classifying item...
+                                    </div>
+                                ) : classificationResult ? (
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex justify-between items-center bg-white p-2 rounded border border-primary border-opacity-20">
+                                            <span className="text-[10px] font-bold text-secondary uppercase">Level 1</span>
+                                            <span className="text-xs font-black text-primary">{classificationResult.l1}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center bg-white p-2 rounded border border-primary border-opacity-20">
+                                            <span className="text-[10px] font-bold text-secondary uppercase">Level 2</span>
+                                            <span className="text-xs font-black text-primary">{classificationResult.l2}</span>
+                                        </div>
+                                    </div>
+                                ) : <div className="text-xs text-danger">Failed to classify.</div>}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-secondary uppercase block mb-1">Est. Savings</label>
+                                    <div className="text-lg font-bold text-success">{formatCurrency(selectedCatalogAdd.potential_savings)}</div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-secondary uppercase block mb-1">Forecast Qty</label>
+                                    <div className="text-lg font-bold text-text">{selectedCatalogAdd.forecast_qty.toLocaleString()}</div>
+                                </div>
+                            </div>
+
+                            <button 
+                                className="btn btn-primary w-full py-4 rounded-xl font-bold mt-2 shadow-lg"
+                                style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
+                                disabled={classifying || !classificationResult}
+                                onClick={async () => {
+                                    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+                                    const res = await fetch(`${API_BASE_URL}/api/add-to-catalog`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                            description: selectedCatalogAdd.description,
+                                            l1: classificationResult.l1,
+                                            l2: classificationResult.l2,
+                                            price: selectedCatalogAdd.potential_savings / selectedCatalogAdd.forecast_qty * 14, // Mock math for contract price
+                                            moq: 1,
+                                            supplier_id: 'S-VAR-999'
+                                        })
+                                    });
+                                    const json = await res.json();
+                                    if (json.status === 'success') {
+                                        setSelectedCatalogAdd(null);
+                                        alert('Item standardized and added to catalog successfully.');
+                                    }
+                                }}
+                            >
+                                <CheckCircle size={18}/> Confirm & Add to Catalog
+                            </button>
+                        </div>
+                    </div>
+                </>
             )}
           </div>
         );
@@ -1257,13 +1570,20 @@ const AdminDashboard = () => {
         return (
           <div className="flex flex-col gap-6">
             {/* Floating Nav */}
-            <div className="sticky top-[72px] z-20 flex gap-2 bg-white border-b border-border py-2 px-1 shadow-sm mb-2">
-                <button className="btn btn-outline text-xs py-1 px-3 font-bold rounded-full" onClick={() => scrollToDf('df-pooling')}>Pooling Opportunities</button>
-                <button className="btn btn-outline text-xs py-1 px-3 font-bold rounded-full" onClick={() => scrollToDf('df-recurring')}>Recurring Tail Items</button>
+            <div className="floating-nav">
+                <a href="#df-kpis" className="floating-nav-item" data-label="KPI Overview"></a>
+                <a href="#df-pooling" className="floating-nav-item" data-label="Pooling Opportunities"></a>
+                <a href="#df-recurring" className="floating-nav-item" data-label="Recurring Tail Items"></a>
+            </div>
+
+            <div className="sticky top-[125px] z-20 flex gap-2 bg-white/80 backdrop-blur-md border border-border/50 py-2 px-3 rounded-full shadow-sm mb-2 w-fit mx-auto transition-all hover:shadow-md">
+                <button className="btn btn-outline text-[10px] py-1 px-3 font-bold rounded-full border-none hover:bg-primary-light hover:text-primary transition-colors" onClick={() => scrollToDf('df-pooling')}>Pooling Opportunities</button>
+                <div className="w-px h-3 bg-border self-center"></div>
+                <button className="btn btn-outline text-[10px] py-1 px-3 font-bold rounded-full border-none hover:bg-primary-light hover:text-primary transition-colors" onClick={() => scrollToDf('df-recurring')}>Recurring Tail Items</button>
             </div>
 
             {/* KPI Tiles */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div id="df-kpis" className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="kpi-card kpi-card-primary p-4">
                     <div className="text-xs font-semibold text-primary mb-1">Predicted Tail Spend (30d)</div>
                     <div className="text-2xl font-bold">{formatCurrency(dfData.kpis.predicted_tail_30d)}</div>
@@ -1275,9 +1595,9 @@ const AdminDashboard = () => {
                     <div className="text-[10px] text-secondary mt-1">Same SKU, 2+ plants, reorder ≤30d</div>
                 </div>
                 <div className="kpi-card kpi-card-warning p-4">
-                    <div className="text-xs font-semibold text-warning mb-1">Seasonal Items to Pre-contract</div>
-                    <div className="text-2xl font-bold">{dfData.kpis.seasonal_items}</div>
-                    <div className="text-[10px] text-secondary mt-1">is_seasonal == True in Patterns</div>
+                    <div className="text-xs font-semibold text-warning mb-1 flex items-center gap-1"><ShieldCheck size={13}/>Preferred Supplier Coverage</div>
+                    <div className="text-2xl font-bold">{dfData.kpis.supplier_coverage_pct?.toFixed(1)}%</div>
+                    <div className="text-[10px] text-secondary mt-1">Unique SKUs under active contract</div>
                 </div>
                 <div className="kpi-card kpi-card-danger p-4">
                     <div className="text-xs font-semibold text-danger mb-1">Recurring Tail Needing Contract</div>
@@ -1300,27 +1620,36 @@ const AdminDashboard = () => {
                         <thead>
                             <tr>
                                 <th>Item SKU</th>
-                                <th>Plants Needing It</th>
-                                <th className="numeric">Total Forecast Qty (90d)</th>
+                                <th>Plants & Qty</th>
+                                <th className="numeric">Total Qty</th>
                                 <th className="numeric">Reorder Freq</th>
-                                <th className="numeric">Est. Pool Saving</th>
+                                <th className="numeric">Est. Saving</th>
                                 <th className="text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {dfData.pooling_opportunities.map((item, i) => (
                                 <tr key={i}>
-                                    <td className="font-bold text-xs">{item['Item SKU']}</td>
+                                    <td className="font-bold text-xs">{item.sku}</td>
                                     <td>
                                         <div className="flex flex-wrap gap-1">
-                                            {item.plants.map((p, idx) => <span key={idx} className="badge badge-neutral text-[9px]">{p}</span>)}
+                                            {Object.entries(item.plant_distribution).map(([plt, qty], idx) => (
+                                                <div key={idx} className="px-1.5 py-0.5 bg-surface-hover border rounded text-[9px] font-bold text-secondary flex items-center gap-1">
+                                                    {plt} <span className="text-primary">{qty}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </td>
-                                    <td className="numeric font-semibold">{item.total_forecast.toLocaleString()}</td>
+                                    <td className="numeric font-semibold">{item.total_qty.toLocaleString()}</td>
                                     <td className="numeric text-secondary text-xs">{item.avg_reorder_freq.toFixed(1)} days</td>
                                     <td className="numeric font-bold text-success">{formatCurrency(item.est_saving)}</td>
                                     <td className="text-center">
-                                        <button className="btn btn-primary text-[10px] py-1 px-2 font-bold">Pool Order</button>
+                                        <button 
+                                            className="btn btn-primary text-[10px] py-1 px-3 font-bold"
+                                            onClick={() => { setSelectedPoolItem(item); setSelectedPoolSupplier(item.top_suppliers[0]); }}
+                                        >
+                                            Pool Order
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -1329,6 +1658,136 @@ const AdminDashboard = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Pool Order Side Drawer */}
+            {selectedPoolItem && (
+                <>
+                    <div className="fixed inset-0 bg-black bg-opacity-30 z-40 animate-fadeIn" onClick={() => setSelectedPoolItem(null)}></div>
+                    <div className="fixed top-0 right-0 h-full w-full max-w-lg bg-white shadow-2xl z-50 flex flex-col animate-slideInRight border-l border-border" style={{ fontFamily: 'var(--font-family)' }}>
+                        <div className="p-5 border-b flex justify-between items-center bg-surface">
+                            <div>
+                                <h2 className="text-lg font-bold flex items-center gap-2 text-primary"><Package size={20}/> Consolidated Pool Order</h2>
+                                <p className="text-[10px] text-secondary font-medium mt-0.5">Aggregate demand across {selectedPoolItem.plants_list.length} plants for volume pricing.</p>
+                            </div>
+                            <button className="text-secondary hover:text-danger p-1" onClick={() => setSelectedPoolItem(null)}>
+                                <X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-5 bg-surface">
+                            <div className="flex flex-col gap-6">
+                                {/* Summary */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-white border rounded-xl shadow-sm">
+                                        <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">SKU / Item</div>
+                                        <div className="text-base font-bold truncate text-text">{selectedPoolItem.sku}</div>
+                                    </div>
+                                    <div className="p-4 bg-white border rounded-xl shadow-sm">
+                                        <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Total Qty</div>
+                                        <div className="text-base font-bold text-text">{selectedPoolItem.total_qty.toLocaleString()}</div>
+                                    </div>
+                                    <div className="p-4 bg-white border rounded-xl shadow-sm">
+                                        <div className="text-[10px] font-bold text-secondary uppercase tracking-wider mb-1">Category</div>
+                                        <div className="text-base font-bold text-text">{selectedPoolItem.category}</div>
+                                    </div>
+                                    <div className="p-4 bg-success-light rounded-xl border border-success border-opacity-30 shadow-sm">
+                                        <div className="text-[10px] font-bold text-success uppercase tracking-wider mb-1">Est. Savings</div>
+                                        <div className="text-base font-bold text-success">{formatCurrency(selectedPoolItem.est_saving)}</div>
+                                    </div>
+                                </div>
+
+                                {/* Plant Distribution */}
+                                <div className="card p-5 bg-white border-none shadow-sm">
+                                    <h4 className="text-xs font-bold text-tertiary uppercase mb-4 flex items-center gap-2">
+                                        <Activity size={14} className="text-primary"/> Plant Distribution
+                                    </h4>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {Object.entries(selectedPoolItem.plant_distribution).map(([plt, qty], idx) => (
+                                            <div key={idx} className="flex justify-between items-center p-3 bg-surface-hover rounded-lg border border-border border-opacity-50">
+                                                <span className="text-sm font-semibold text-secondary">{plt}</span>
+                                                <span className="text-sm font-black text-primary">{qty.toLocaleString()} <span className="text-[10px] font-bold text-tertiary">UNITS</span></span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Supplier Selection (Tiles) */}
+                                <div className="flex flex-col gap-3">
+                                    <h4 className="text-xs font-bold text-tertiary uppercase flex items-center gap-2">
+                                        <Zap size={14} className="text-primary"/> Select Supplier (Top 3 Contract-Backed)
+                                    </h4>
+                                    <div className="flex flex-col gap-3">
+                                        {selectedPoolItem.top_suppliers.map((s, idx) => (
+                                            <div 
+                                                key={idx}
+                                                onClick={() => setSelectedPoolSupplier(s)}
+                                                className={`relative p-4 rounded-xl border-2 transition-all cursor-pointer hover:shadow-md ${selectedPoolSupplier?.supplier_id === s.supplier_id ? 'border-primary bg-primary-light' : 'border-border bg-white'}`}
+                                            >
+                                                {s.is_recommended && (
+                                                    <span className="absolute -top-2 -right-2 bg-success text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-sm">RECOMMENDED</span>
+                                                )}
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="font-bold text-sm text-text">{s.supplier_name}</div>
+                                                    <div className="text-xs font-bold text-primary">{formatCurrency(s.price)}</div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <AlertOctagon size={12} className={s.risk > 7 ? 'text-danger' : s.risk > 4 ? 'text-warning' : 'text-success'}/>
+                                                        <span className="text-[10px] font-bold text-secondary">Risk: <span className="text-text">{s.risk}/10</span></span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Loader size={12} className="text-primary"/>
+                                                        <span className="text-[10px] font-bold text-secondary">Lead Time: <span className="text-text">{s.lead_time} days</span></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5 border-t bg-white shadow-lg">
+                            <button 
+                                className="btn btn-primary w-full py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-sm"
+                                disabled={!selectedPoolSupplier}
+                                onClick={async () => {
+                                    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+                                    const poData = {
+                                        supplier_id: selectedPoolSupplier.supplier_id,
+                                        supplier_name: selectedPoolSupplier.supplier_name,
+                                        total_quantity: selectedPoolItem.total_qty,
+                                        category: selectedPoolItem.category,
+                                        sku: selectedPoolItem.sku,
+                                        delivery_distribution: selectedPoolItem.plant_distribution,
+                                        po_type: "Consolidated",
+                                        is_pooled: true,
+                                        amount: selectedPoolItem.total_qty * selectedPoolSupplier.price,
+                                        status: 'Created',
+                                        created_at: new Date().toISOString()
+                                    };
+                                    try {
+                                        const res = await fetch(`${API_BASE_URL}/api/submit-po`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify(poData)
+                                        });
+                                        const json = await res.json();
+                                        if (json.status === 'success') {
+                                            setSelectedPoolItem(null);
+                                            // Redirect to Purchase History
+                                            navigate('/admin/purchase-history');
+                                        }
+                                    } catch (e) { console.error(e); }
+                                }}
+                            >
+                                <CheckCircle size={18}/> Confirm & Create Consolidated PO
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
 
             {/* Section 2 — Recurring tail items that should be contracted */}
             <div id="df-recurring" className="card p-0 overflow-hidden border-t-4 border-t-warning">
@@ -1510,6 +1969,75 @@ const AdminDashboard = () => {
           </div>
         );
 
+      case 'Purchase History':
+        return (
+          <div className="flex flex-col gap-6">
+            <div className="card p-0 overflow-hidden border-t-4 border-t-primary">
+              <div className="p-4 border-b bg-surface flex justify-between items-center">
+                <div>
+                    <h3 className="mb-0 text-sm font-bold flex items-center gap-2 text-primary"><Package size={16}/> Purchase History / Orders</h3>
+                    <p className="text-[10px] text-secondary font-medium">Monitoring created POs and fulfillment status.</p>
+                </div>
+                <button 
+                    className="btn btn-outline text-xs py-1 px-3"
+                    onClick={async () => {
+                        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+                        const res = await fetch(`${API_BASE_URL}/api/purchase-history`);
+                        const json = await res.json();
+                        if (json.status === 'success') setDashboardData(json.data);
+                    }}
+                >
+                    Refresh List
+                </button>
+              </div>
+              <div className="table-container border-none" style={{ borderRadius: 0 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>PO ID</th>
+                      <th>Supplier</th>
+                      <th>Item / Category</th>
+                      <th className="numeric">Total Qty</th>
+                      <th>Distribution</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData && Array.isArray(dashboardData) && dashboardData.length > 0 ? (
+                      dashboardData.map((po, i) => (
+                        <tr key={i}>
+                          <td className="font-bold text-xs">{po.po_number}</td>
+                          <td className="font-medium text-xs">
+                            {po.supplier_name}
+                            {po.is_pooled && <span className="badge badge-primary text-[8px] ml-2 font-black">POOLED ORDER</span>}
+                          </td>
+                          <td>
+                            <div className="text-xs font-bold">{po.sku}</div>
+                            <div className="text-[10px] text-secondary">{po.category}</div>
+                          </td>
+                          <td className="numeric font-bold">{po.total_quantity?.toLocaleString()}</td>
+                          <td>
+                            <div className="flex flex-wrap gap-1">
+                              {Object.entries(po.delivery_distribution || {}).map(([p, q], idx) => (
+                                <span key={idx} className="badge badge-neutral text-[9px]">{p}: {q}</span>
+                              ))}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`badge ${po.status === 'Created' ? 'badge-success' : 'badge-warning'} text-[10px] font-bold`}>{po.status}</span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={6} className="text-center py-10 text-secondary">No purchase history found. Try creating a pooled order.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+
       default:
         return <div>Select a tab</div>;
     }
@@ -1522,14 +2050,19 @@ const AdminDashboard = () => {
             <h1 className="mb-1 text-primary">Control Tower Analytics</h1>
             <p className="text-secondary font-medium">Enterprise tail spend monitoring and compliance dashboard.</p>
             </div>
-            <button className="btn btn-outline flex items-center gap-2" onClick={() => navigate('/')}>
-            <LogOut size={16} /> Exit
-            </button>
+            <div className="flex items-center gap-3">
+                <button className="btn btn-outline flex items-center gap-2 border-primary text-primary hover:bg-primary-light" onClick={() => navigate('/admin/purchase-history')}>
+                    <Package size={16} /> Orders
+                </button>
+                <button className="btn btn-outline flex items-center gap-2" onClick={() => navigate('/')}>
+                    <LogOut size={16} /> Exit
+                </button>
+            </div>
         </div>
         
         <div className="container" style={{ paddingBottom: '4rem' }}>
-            <div className="tabs-container">
-            {tabs.map((tab) => (
+            <div className="tabs-container sticky top-[72px] z-[40] backdrop-blur-md bg-white/90">
+            {tabs.filter(t => t.slug !== 'purchase-history').map((tab) => (
                 <button
                 key={tab.name}
                 className={`tab ${activeTab === tab.name ? 'active' : ''}`}
