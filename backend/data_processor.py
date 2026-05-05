@@ -1112,69 +1112,98 @@ class DataEngine:
         # STEP 2: Fetch Active Contracts
         today = pd.Timestamp.now()
         active_contracts = self.contracts_df_raw.copy()
-        active_contracts['Contract End Date'] = pd.to_datetime(active_contracts['Contract End Date'], errors='coerce')
+        
+        if active_contracts.empty:
+            return {
+                "l1_category": predicted_l1,
+                "predicted_category": predicted_l2,
+                "preferred_suppliers": []
+            }
+
+        # Find columns robustly
+        def find_col_local(cols, target):
+            for c in cols:
+                if c.lower() == target.lower(): return c
+            for c in cols:
+                if c.replace(" ", "_").lower() == target.lower(): return c
+            return next((c for c in cols if target.lower() in c.lower()), None)
+
+        l2_col = find_col_local(active_contracts.columns, 'Category L2') or 'Category L2'
+        is_active_col = find_col_local(active_contracts.columns, 'is_active') or 'is_active'
+        expiry_col = find_col_local(active_contracts.columns, 'Contract End Date') or 'Contract End Date'
+        price_col = find_col_local(active_contracts.columns, 'Contracted Unit Price') or 'Contracted Unit Price'
+        sid_col = find_col_local(active_contracts.columns, 'Supplier ID') or 'Supplier ID'
+        moq_col = find_col_local(active_contracts.columns, 'Minimum Order Qty') or 'Minimum Order Qty'
+        
+        if expiry_col in active_contracts.columns:
+            active_contracts[expiry_col] = pd.to_datetime(active_contracts[expiry_col], errors='coerce')
         
         # Initial filter for exact L2
-        l2_contracts = active_contracts[
-            (active_contracts['Category L2'] == predicted_l2) &
-            (active_contracts['is_active'].astype(str).str.upper() == 'TRUE') &
-            (active_contracts['Contract End Date'] > today)
-        ]
+        mask = pd.Series([True] * len(active_contracts))
+        if l2_col in active_contracts.columns:
+            mask &= (active_contracts[l2_col] == predicted_l2)
+        if is_active_col in active_contracts.columns:
+            mask &= (active_contracts[is_active_col].astype(str).str.upper() == 'TRUE')
+        if expiry_col in active_contracts.columns:
+            mask &= (active_contracts[expiry_col] > today)
+            
+        l2_contracts = active_contracts[mask].copy()
         
         # FALLBACK LOGIC: If no contracts for L2, fallback to any L2 under the same L1
         if l2_contracts.empty and predicted_l1 and hasattr(self, 'category_taxonomy_df') and not self.category_taxonomy_df.empty:
             sibling_l2s = self.category_taxonomy_df[self.category_taxonomy_df['L1'] == predicted_l1]['L2'].dropna().unique()
-            l2_contracts = active_contracts[
-                (active_contracts['Category L2'].isin(sibling_l2s)) &
-                (active_contracts['is_active'].astype(str).str.upper() == 'TRUE') &
-                (active_contracts['Contract End Date'] > today)
-            ]
+            mask_sib = pd.Series([True] * len(active_contracts))
+            if l2_col in active_contracts.columns:
+                mask_sib &= (active_contracts[l2_col].isin(sibling_l2s))
+            if is_active_col in active_contracts.columns:
+                mask_sib &= (active_contracts[is_active_col].astype(str).str.upper() == 'TRUE')
+            if expiry_col in active_contracts.columns:
+                mask_sib &= (active_contracts[expiry_col] > today)
+            l2_contracts = active_contracts[mask_sib].copy()
             
         active_contracts = l2_contracts
         
         # STEP 3 & 4: Fetch Suppliers, join Supplier_Master, sort by Price ASC, Top 3
-        # Convert prices to numeric safely
-        active_contracts['Contracted Unit Price'] = pd.to_numeric(active_contracts['Contracted Unit Price'], errors='coerce')
-        active_contracts = active_contracts.dropna(subset=['Contracted Unit Price'])
+        if price_col in active_contracts.columns:
+            active_contracts[price_col] = pd.to_numeric(active_contracts[price_col], errors='coerce')
+            active_contracts = active_contracts.dropna(subset=[price_col])
         
-        # Join Supplier_Master and compute score
         supplier_options = []
+        supp_master = self.supp_df_raw
+        sid_col_sm = find_col_local(supp_master.columns, 'SupplierID') or 'SupplierID'
+        sname_col_sm = next((c for c in ['Supplier Name', 'Supplier Name Raw', 'SupplierName'] if c in supp_master.columns), 'Supplier Name')
+        risk_col_sm = find_col_local(supp_master.columns, 'Compliance Risk ') or 'Compliance Risk '
+
         for _, c_row in active_contracts.iterrows():
-            sid = c_row['Supplier ID']
-            s_match = self.supp_df_raw[self.supp_df_raw['SupplierID'] == sid]
+            sid = c_row[sid_col] if sid_col in c_row else 'Unknown'
+            s_match = supp_master[supp_master[sid_col_sm] == sid] if sid_col_sm in supp_master.columns else pd.DataFrame()
             
-            s_name = str(s_match['Supplier Name'].iloc[0]) if not s_match.empty and 'Supplier Name' in s_match.columns else sid
-            r_score = self._safe_float(s_match['Compliance Risk '].iloc[0]) if not s_match.empty and 'Compliance Risk ' in s_match.columns else 0.0
+            s_name = str(s_match[sname_col_sm].iloc[0]) if not s_match.empty and sname_col_sm in s_match.columns else sid
+            r_score = self._safe_float(s_match[risk_col_sm].iloc[0]) if not s_match.empty and risk_col_sm in s_match.columns else 0.0
             
-            price = self._safe_float(c_row.get('Contracted Unit Price'))
-            # Score: lower is better. Price + penalty for risk
-            score = price + (price * (r_score * 0.05))
+            price = self._safe_float(c_row.get(price_col))
+            moq = self._safe_int(c_row.get(moq_col))
+            
+            score = price + (price * r_score * 0.02)
             
             supplier_options.append({
                 "supplier_id": sid,
                 "supplier_name": s_name,
                 "contracted_price": price,
-                "moq": self._safe_int(c_row.get('Minimum Order Qty')),
                 "risk_score": r_score,
-                "score": score
+                "moq": moq,
+                "score": score,
+                "is_preferred": True if r_score < 4 else False
             })
             
-        # STRICT PREFERRED LOGIC: Only the supplier with lowest score is marked as preferred
-        if supplier_options:
-            supplier_options = sorted(supplier_options, key=lambda x: x['score'])
-            for i, supp in enumerate(supplier_options):
-                supp['is_preferred'] = (i == 0)
-                
-            # Now sort by price to show to user
-            supplier_options = sorted(supplier_options, key=lambda x: x['contracted_price'])
-        
-        # Return top 3
-        top_3_suppliers = supplier_options[:3]
-        
+        supplier_options = sorted(supplier_options, key=lambda x: x['score'])[:3]
+        if supplier_options and not any(s['is_preferred'] for s in supplier_options):
+            supplier_options[0]['is_preferred'] = True
+
         return {
             "l1_category": predicted_l1,
             "predicted_category": predicted_l2,
-            "preferred_suppliers": top_3_suppliers
+            "preferred_suppliers": supplier_options
         }
         
     def submit_po(self, po_data):

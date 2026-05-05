@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LogOut, TrendingUp, AlertOctagon, ShieldAlert, Package, Search, DollarSign, Users, AlertTriangle, ArrowUpRight, Loader, UserCheck, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Info, Send, X, CheckCircle, Mail, Zap, Filter, BarChart2, Activity, ShieldCheck } from 'lucide-react';
+import { LogOut, TrendingUp, AlertOctagon, ShieldAlert, Package, Search, DollarSign, Users, AlertTriangle, ArrowUpRight, Loader, UserCheck, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Info, Send, X, CheckCircle, Mail, Zap, Filter, BarChart2, Activity, ShieldCheck, LayoutGrid } from 'lucide-react';
 
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -437,11 +437,130 @@ const SavingsLeakageTab = ({ data, formatCurrency, renderBadge }) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 // CATALOG TAB COMPONENT
 // ──────────────────────────────────────────────────────────────────────────────
+const CatalogTab = ({ formatCurrency }) => {
+  const [catalog, setCatalog] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedL1, setSelectedL1] = useState('All');
+  const [selectedL2, setSelectedL2] = useState('All');
 
+  useEffect(() => {
+    fetchCatalog();
+  }, []);
 
-// ──────────────────────────────────────────────────────────────────────────────
+  const fetchCatalog = async () => {
+    setLoading(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+      const res = await fetch(`${API_BASE_URL}/api/dashboard/catalog`);
+      const json = await res.json();
+      if (json.status === 'success') {
+        setCatalog(json.data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setLoading(false);
+  };
+
+  const l1Categories = ['All', ...new Set(catalog.map(item => item.l1))];
+  const l2Categories = ['All', ...new Set(catalog.filter(item => selectedL1 === 'All' || item.l1 === selectedL1).map(item => item.l2))];
+
+  const filteredItems = catalog.filter(item => {
+    const matchL1 = selectedL1 === 'All' || item.l1 === selectedL1;
+    const matchL2 = selectedL2 === 'All' || item.l2 === selectedL2;
+    return matchL1 && matchL2;
+  });
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center p-20 bg-surface rounded-2xl border border-dashed border-border">
+        <Loader className="animate-spin text-primary mb-4" size={40} />
+        <div className="text-lg font-bold text-text">Loading Contracts Catalogue...</div>
+        <div className="text-sm text-secondary">Fetching active standardized items</div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-6 animate-fadeIn">
+      <div className="card p-6 flex flex-wrap gap-4 justify-between items-center bg-surface border-b border-t-4 border-t-primary shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+        <div>
+          <h2 className="mb-1 flex items-center gap-2 text-primary font-black"><Package size={24}/> Contracts Catalogue</h2>
+          <p className="text-sm text-secondary font-medium">Browse standardized items under active contracts.</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-secondary uppercase tracking-wider">Category Level 1</label>
+            <select 
+              className="input text-sm py-2 px-3 font-medium bg-white" 
+              value={selectedL1}
+              onChange={(e) => { setSelectedL1(e.target.value); setSelectedL2('All'); }}
+              style={{ minWidth: '180px' }}
+            >
+              {l1Categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold text-secondary uppercase tracking-wider">Category Level 2</label>
+            <select 
+              className="input text-sm py-2 px-3 font-medium bg-white" 
+              value={selectedL2}
+              onChange={(e) => setSelectedL2(e.target.value)}
+              style={{ minWidth: '180px' }}
+            >
+              {l2Categories.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {filteredItems.map((item, i) => (
+          <div key={i} className="card p-5 hover:shadow-xl transition-all duration-300 group border-border hover:border-primary/30" style={{ borderTop: `4px solid ${item.is_under_contract ? 'var(--color-success)' : 'var(--color-warning)'}` }}>
+            <div className="flex justify-between items-start mb-4">
+              <h4 className="font-bold text-base leading-tight text-text line-clamp-2" title={item.item_description}>{item.item_description}</h4>
+              <span className={`badge ${item.is_under_contract ? 'badge-success' : 'badge-warning'} text-[9px] font-black uppercase tracking-tighter py-0.5 px-2`}>
+                {item.is_under_contract ? 'Contracted' : 'Non-Contract'}
+              </span>
+            </div>
+            <div className="text-3xl font-black text-primary mb-1 tracking-tight">{formatCurrency(item.price)}</div>
+            <div className="text-xs text-secondary font-bold mb-5 flex items-center gap-1.5">
+                <span className="opacity-60">SKU:</span> {item.sku}
+            </div>
+            
+            <div className="flex flex-col gap-3 pt-5 border-t border-border/50">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-secondary font-medium">Supplier</span>
+                <span className="font-bold text-text truncate max-w-[130px] bg-surface-hover px-2 py-1 rounded" title={item.supplier_name}>{item.supplier_name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-secondary font-medium">MOQ</span>
+                <span className="font-bold text-text">{item.moq} Units</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-secondary font-medium">Category</span>
+                <span className="font-bold text-secondary text-[10px] truncate max-w-[130px]" title={item.l2}>{item.l2}</span>
+              </div>
+            </div>
+            
+            <button className="w-full mt-5 py-2.5 bg-primary text-white text-xs font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-md transform translate-y-2 group-hover:translate-y-0">
+                View Details
+            </button>
+          </div>
+        ))}
+        {filteredItems.length === 0 && (
+          <div className="col-span-full p-20 text-center bg-surface border border-dashed rounded-3xl">
+            <Package size={60} className="mx-auto text-tertiary mb-4 opacity-10" />
+            <h3 className="text-secondary font-black text-xl">No items found</h3>
+            <p className="text-sm text-tertiary font-medium">We couldn't find any items matching these category filters.</p>
+            <button className="mt-6 btn btn-outline font-bold px-8" onClick={() => { setSelectedL1('All'); setSelectedL2('All'); }}>Reset Filters</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 // ADMIN DASHBOARD MAIN COMPONENT
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -456,6 +575,7 @@ const AdminDashboard = () => {
     { name: 'Consolidation', slug: 'consolidation', endpoint: '/api/dashboard/consolidation', icon: <AlertOctagon size={16} /> },
     { name: 'Demand Forecast', slug: 'demand-forecast', endpoint: '/api/dashboard/demand-forecast', icon: <TrendingUp size={16} /> },
     { name: 'Buyer Behaviour', slug: 'buyer-behavior', endpoint: '/api/dashboard/buyer-behavior', icon: <UserCheck size={16} /> },
+    { name: 'Catalogue', slug: 'catalog', endpoint: '/api/dashboard/catalog', icon: <LayoutGrid size={16} /> },
     { name: 'Purchase History', slug: 'purchase-history', endpoint: '/api/purchase-history', icon: <Package size={16} /> }
   ];
 
@@ -1968,6 +2088,9 @@ const AdminDashboard = () => {
             </div>
           </div>
         );
+
+      case 'Catalogue':
+        return <CatalogTab formatCurrency={formatCurrency} />;
 
       case 'Purchase History':
         return (
