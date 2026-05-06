@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, CheckCircle, ShieldAlert, Package, Clock, Users, AlertTriangle } from 'lucide-react';
+import { APP_CONFIG } from '../config';
 
 const UserPortal = () => {
   const navigate = useNavigate();
@@ -20,8 +21,6 @@ const UserPortal = () => {
   const [poHistory, setPoHistory] = useState([]);
   const [viewingPO, setViewingPO] = useState(null);
 
-  const THRESHOLD = 10000;
-
   useEffect(() => {
     document.body.classList.remove('admin-body');
   }, []);
@@ -34,7 +33,7 @@ const UserPortal = () => {
 
   const fetchHistory = async () => {
       try {
-          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+          const API_BASE_URL = APP_CONFIG.API_BASE_URL;
           const res = await fetch(`${API_BASE_URL}/api/purchase-history`);
           const json = await res.json();
           if (json.status === 'success') {
@@ -47,7 +46,7 @@ const UserPortal = () => {
 
   useEffect(() => {
     const classify = async () => {
-        if (!description || description.length < 5) {
+        if (!description || description.length < APP_CONFIG.MIN_CLASSIFY_LENGTH) {
             setPredictedL1(null);
             setPredictedL2(null);
             setPreferredSuppliers([]);
@@ -56,7 +55,7 @@ const UserPortal = () => {
         }
         setIsClassifying(true);
         try {
-            const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+            const API_BASE_URL = APP_CONFIG.API_BASE_URL;
             const res = await fetch(`${API_BASE_URL}/api/classify-purchase`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -75,7 +74,7 @@ const UserPortal = () => {
         setIsClassifying(false);
     };
 
-    const debounce = setTimeout(() => { classify(); }, 800);
+    const debounce = setTimeout(() => { classify(); }, APP_CONFIG.DEBOUNCE_DELAY_MS);
     return () => clearTimeout(debounce);
   }, [description]);
 
@@ -96,9 +95,9 @@ const UserPortal = () => {
       
   const leakage = selectedSupplier ? (selectedSupplier.contracted_price - bestPrice) * quantity : 0;
   
-  const requiresApproval = amount > THRESHOLD;
+  const requiresApproval = amount > APP_CONFIG.AUTO_APPROVAL_THRESHOLD;
 
-  const formatCurrency = (value) => `₹${value.toLocaleString('en-IN')}`;
+  const formatCurrency = (value) => `${APP_CONFIG.CURRENCY_SYMBOL}${value.toLocaleString(APP_CONFIG.CURRENCY_LOCALE)}`;
 
   const submitPO = async (status) => {
       const poData = {
@@ -113,7 +112,7 @@ const UserPortal = () => {
       };
       
       try {
-          const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+          const API_BASE_URL = APP_CONFIG.API_BASE_URL;
           await fetch(`${API_BASE_URL}/api/submit-po`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -283,11 +282,11 @@ const UserPortal = () => {
                                 {requiresApproval ? (
                                     <div className="card bg-surface border-warning-border border mt-4">
                                         <h4 className="font-bold text-warning flex items-center gap-2 mb-3"><ShieldAlert size={18}/> Requires Management Approval</h4>
-                                        <p className="text-sm text-secondary font-medium mb-4">Amount {formatCurrency(amount)} exceeds the {formatCurrency(THRESHOLD)} auto-approval limit.</p>
+                                        <p className="text-sm text-secondary font-medium mb-4">Amount {formatCurrency(amount)} exceeds the {formatCurrency(APP_CONFIG.AUTO_APPROVAL_THRESHOLD)} auto-approval limit.</p>
                                         
                                         <label className="input-label">ADD APPROVERS (Select up to 3)</label>
                                         <div className="flex gap-3 mb-6">
-                                            {['Manager', 'Finance', 'Procurement'].map(role => (
+                                            {APP_CONFIG.APPROVER_ROLES.map(role => (
                                                 <button 
                                                     key={role}
                                                     onClick={() => {

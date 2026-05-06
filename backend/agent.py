@@ -1,3 +1,101 @@
+from google import genai
+from config import GEMINI_API_KEY
+import logging
+
+# Configure Logging
+logger = logging.getLogger(__name__)
+
+class TailSpendAIAgent:
+    def __init__(self):
+        self.enabled = False
+        if GEMINI_API_KEY:
+            try:
+                # Use the NEW google-genai client
+                self.client = genai.Client(api_key=GEMINI_API_KEY)
+                self.model_name = 'gemini-flash-latest'
+                self.enabled = True
+                logger.info("Modern Gemini AI Agent (google-genai) enabled.")
+            except Exception as e:
+                logger.error(f"Failed to initialize Modern Gemini AI: {e}")
+        
+        self.advice_cache = {}
+
+    def get_recurring_advice(self, item_sku, freq, qty, plants):
+        """
+        Generate contextual advice for a recurring tail item.
+        Uses cache to avoid redundant API calls and maintain low latency.
+        """
+        cache_key = f"rec_{item_sku}_{freq}_{qty}_{plants}"
+        if cache_key in self.advice_cache:
+            return self.advice_cache[cache_key]
+
+        if not self.enabled:
+            return None
+
+        prompt = f"""
+        Analyze this procurement demand pattern and give a one-sentence "Agent Recommendation" for a procurement manager.
+        Item SKU: {item_sku}
+        Reorder Frequency: Every {freq:.1f} days
+        Forecasted Qty (90d): {qty:,.0f} units
+        Number of Plants buying this: {plants}
+
+        Rules for recommendation:
+        1. Be concise (max 20 words).
+        2. Use a professional, strategic tone.
+        3. If freq is low, emphasize velocity risk.
+        4. If plants > 1, emphasize consolidation.
+        5. Suggest a specific procurement action (e.g., cataloging, blanket PO, RFQ).
+        
+        Output only the recommendation string.
+        """
+
+        try:
+            # New google-genai syntax
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            advice = response.text.strip()
+            self.advice_cache[cache_key] = advice
+            return advice
+        except Exception as e:
+            logger.error(f"Gemini API Error: {e}")
+            return None
+
+    def get_leakage_advice(self, category, leakage_val, root_cause):
+        """
+        Generate contextual advice for a savings leakage category.
+        """
+        cache_key = f"leak_{category}_{leakage_val}_{root_cause}"
+        if cache_key in self.advice_cache:
+            return self.advice_cache[cache_key]
+
+        if not self.enabled:
+            return None
+
+        prompt = f"""
+        Analyze this savings leakage and suggest a specific corrective action.
+        Category: {category}
+        Leakage Amount: ₹{leakage_val:,.0f}
+        Root Cause: {root_cause}
+
+        Suggest a one-sentence "Manager Action" to stop this leakage. Be firm and tactical.
+        Output only the string.
+        """
+
+        try:
+            # New google-genai syntax
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+            advice = response.text.strip()
+            self.advice_cache[cache_key] = advice
+            return advice
+        except Exception as e:
+            logger.error(f"Gemini API Error: {e}")
+            return None
+
 # ADK definition for Agent 1 - Intake & Classification Agent
 
 class LlmAgent:
@@ -96,7 +194,7 @@ intake_agent = LlmAgent(
         calculate_leakage_realtime, 
         auto_classify_pcard
     ],
-    model="gemini-2.0-flash",
+    model="gemini-flash-latest",
 )
 
 # ==============================================================================
@@ -164,7 +262,7 @@ optimisation_agent = LlmAgent(
     description="Runs weekly. Consolidates supplier base by category, deduplicates vendor master aliases, detects and offboards dormant suppliers, scores risk for all tail suppliers, drafts renewal RFQs for expiring contracts, flags single-source dependencies.",
     tools=[consolidation_analysis, dedup_vendor_master, detect_dormant_suppliers,
            risk_score_suppliers, detect_single_source, draft_rfq, contract_expiry_alerts],
-    model="gemini-2.0-flash",
+    model="gemini-flash-latest",
 )
 
 # ==============================================================================
@@ -195,5 +293,5 @@ insights_agent = LlmAgent(
     name="DashboardInsightsAgent",
     description="Performs and fetches db data, leakage data, Compliance & Buyer Behaviour.",
     tools=[fetch_db_data, fetch_leakage_data, fetch_compliance_data, fetch_buyer_behaviour_data],
-    model="gemini-2.0-flash",
+    model="gemini-flash-latest",
 )

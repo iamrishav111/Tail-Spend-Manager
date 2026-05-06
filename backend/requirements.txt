@@ -2,3 +2,11 @@ fastapi
 uvicorn
 pandas
 requests
+numpy
+scikit-learn
+sentence-transformers
+torch
+google-genai
+python-dotenv
+google-auth
+google-api-python-client
