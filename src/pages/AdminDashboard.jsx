@@ -1270,8 +1270,10 @@ const AdminDashboard = () => {
                         <thead>
                             <tr>
                                 <th>Category</th>
-                                <th className="numeric">Spend</th>
+                                <th className="numeric">Uncontrolled spend</th>
                                 <th className="numeric">Suppliers</th>
+                                <th>Agent Recommends</th>
+                                <th>Why</th>
                                 <th className="text-center">Action</th>
                             </tr>
                         </thead>
@@ -1284,13 +1286,31 @@ const AdminDashboard = () => {
                                     <td className="font-semibold text-sm">{item.category}</td>
                                     <td className="numeric font-bold text-primary">{formatCurrency(item.spend)}</td>
                                     <td className="numeric font-medium">{item.suppliers}</td>
+                                    <td><span className="badge badge-primary bg-primary/10 text-primary border-primary/20">{item.recommendation}</span></td>
+                                    <td className="text-xs text-secondary font-medium italic max-w-[300px]">{item.why}</td>
                                     <td className="text-center">
                                         <button 
                                             className="btn btn-primary text-xs py-1.5 px-4 rounded-full font-bold"
                                             style={{ backgroundColor: '#6d28d9' }}
-                                            onClick={() => setSelectedContractAction(item)}
+                                            onClick={() => {
+                                                if (item.recommendation === 'Run RFQ' || item.recommendation === 'Blanket PO') {
+                                                    setSelectedActionCategory({
+                                                        ...item,
+                                                        supplier_count: item.suppliers,
+                                                        target_suppliers: 1,
+                                                        suppliers: [], 
+                                                        target_suppliers_list: [],
+                                                        estimated_savings: item.spend * 0.08,
+                                                        avg_risk_before: 6.5,
+                                                        avg_risk_after: 2.1,
+                                                        is_blanket_po: item.recommendation === 'Blanket PO'
+                                                    });
+                                                } else {
+                                                    setSelectedContractAction(item);
+                                                }
+                                            }}
                                         >
-                                            Take Action
+                                            Create Contract
                                         </button>
                                     </td>
                                 </tr>
@@ -1319,27 +1339,33 @@ const AdminDashboard = () => {
                             <div className="p-4 bg-primary-light rounded-lg border border-primary border-opacity-20">
                                 <div className="flex items-center gap-3 mb-2">
                                     <Zap size={18} className="text-primary"/>
-                                    <span className="font-bold text-primary">{selectedContractAction.action_type}</span>
+                                    <span className="font-bold text-primary">{selectedContractAction.recommendation}</span>
                                 </div>
                                 <div className="text-sm font-medium text-secondary italic">
-                                    "{selectedContractAction.reason}"
+                                    "{selectedContractAction.why}"
                                 </div>
                             </div>
 
                             <div className="flex flex-col gap-3">
                                 <div className="text-xs font-bold text-secondary uppercase">Next Steps</div>
                                 <div className="text-sm text-text font-medium leading-relaxed">
-                                    {selectedContractAction.action_type === 'Create Contract' ? (
+                                    {selectedContractAction.recommendation === 'Run RFQ' ? (
                                         <ul className="list-disc pl-5 flex flex-col gap-1">
-                                            <li>Select top 2 preferred suppliers</li>
-                                            <li>Set baseline price using median historical price</li>
-                                            <li>Create contract draft</li>
+                                            <li>Invite top 3-5 potential vendors</li>
+                                            <li>Standardize technical specifications</li>
+                                            <li>Request competitive commercial offers</li>
+                                        </ul>
+                                    ) : selectedContractAction.recommendation === 'Blanket PO' ? (
+                                        <ul className="list-disc pl-5 flex flex-col gap-1">
+                                            <li>Select preferred vendor for volume aggregation</li>
+                                            <li>Negotiate tiered pricing based on annual forecast</li>
+                                            <li>Establish call-off mechanism for easier buying</li>
                                         </ul>
                                     ) : (
                                         <ul className="list-disc pl-5 flex flex-col gap-1">
-                                            <li>Invite 3–4 suppliers</li>
-                                            <li>Collect quotations</li>
-                                            <li>Recommend best supplier</li>
+                                            <li>Verify historical pricing trends</li>
+                                            <li>Establish direct negotiation with incumbent</li>
+                                            <li>Finalize contract terms</li>
                                         </ul>
                                     )}
                                 </div>
@@ -1349,11 +1375,11 @@ const AdminDashboard = () => {
                                 className="btn btn-primary w-full py-3 rounded-lg font-bold mt-4 shadow-lg"
                                 style={{ backgroundColor: '#6d28d9' }}
                                 onClick={() => {
-                                    alert(`${selectedContractAction.action_type} initiated for ${selectedContractAction.category}`);
+                                    alert(`${selectedContractAction.recommendation} initiated for ${selectedContractAction.category}`);
                                     setSelectedContractAction(null);
                                 }}
                             >
-                                Proceed to {selectedContractAction.action_type}
+                                Proceed to {selectedContractAction.recommendation}
                             </button>
                         </div>
                     </div>
@@ -1367,8 +1393,14 @@ const AdminDashboard = () => {
                     <div className="fixed top-0 right-0 h-full w-full max-w-xl bg-white shadow-2xl z-50 flex flex-col animate-slideInRight border-l border-border">
                         <div className="p-5 border-b flex justify-between items-center bg-surface">
                             <div>
-                                <h2 className="text-lg font-bold flex items-center gap-2"><Zap size={20} className="text-primary"/> Action: {selectedActionCategory.category}</h2>
-                                <p className="text-xs text-secondary font-medium mt-0.5">Consolidate {selectedActionCategory.supplier_count} suppliers into {selectedActionCategory.target_suppliers}.</p>
+                                <h2 className="text-lg font-bold flex items-center gap-2">
+                                    <Zap size={20} className="text-primary"/> {selectedActionCategory.is_blanket_po ? 'Blanket PO' : 'Action'}: {selectedActionCategory.category}
+                                </h2>
+                                <p className="text-xs text-secondary font-medium mt-0.5">
+                                    {selectedActionCategory.is_blanket_po 
+                                        ? `Establish blanket agreement for ${selectedActionCategory.category}`
+                                        : `Consolidate ${selectedActionCategory.supplier_count} suppliers into ${selectedActionCategory.target_suppliers}.`}
+                                </p>
                             </div>
                             <button className="text-secondary hover:text-danger p-1" onClick={() => { setSelectedActionCategory(null); setRfqStatus(null); }}>
                                 <X size={24} />
@@ -1378,47 +1410,62 @@ const AdminDashboard = () => {
                         <div className="flex-1 overflow-y-auto p-5 bg-surface">
                             <div className="flex flex-col gap-5">
                                 {/* Fragmentation View */}
-                                <div className="card p-0 border border-danger border-opacity-30">
+                                <div id="consolidation-fragmentation" className="card p-0 border border-danger border-opacity-30">
                                     <div className="p-3 bg-danger-bg border-b border-danger border-opacity-30 font-bold text-danger text-xs flex items-center gap-2">
                                         <AlertTriangle size={14}/> Current Fragmentation ({selectedActionCategory.supplier_count} Suppliers)
                                     </div>
                                     <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto">
-                                        {selectedActionCategory.suppliers.map((s, i) => (
-                                            <div key={i} className="p-2.5 border rounded bg-white text-xs">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <div className="font-bold">{s.supplier_name}</div>
-                                                    <div className="font-bold text-danger">Risk: {s.risk_score}/10</div>
+                                        {(selectedActionCategory.suppliers || []).length > 0 ? (
+                                            selectedActionCategory.suppliers.map((s, i) => (
+                                                <div key={i} className="p-2.5 border rounded bg-white text-xs">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div className="font-bold">{s.supplier_name}</div>
+                                                        <div className="font-bold text-danger">Risk: {s.risk_score}/10</div>
+                                                    </div>
+                                                    <div className="flex justify-between text-tertiary">
+                                                        <span>Volume: {formatCurrency(s.spend)}</span>
+                                                        <span>Rate: {s.contract_value ? `₹${s.contract_value}` : 'No Contract'}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between text-tertiary">
-                                                    <span>Volume: {formatCurrency(s.spend)}</span>
-                                                    <span>Rate: {s.contract_value ? `₹${s.contract_value}` : 'No Contract'}</span>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        ) : (
+                                            <div className="p-4 text-center text-xs text-secondary italic">Fragmentation data being calculated...</div>
+                                        )}
                                     </div>
                                 </div>
 
                                 {/* Recommendation View */}
                                 <div className="card p-0 border border-success">
                                     <div className="p-3 bg-success-bg border-b border-success font-bold text-success text-xs flex items-center gap-2">
-                                        <CheckCircle size={14}/> Recommended Targets ({selectedActionCategory.target_suppliers} Suppliers)
+                                        <CheckCircle size={14}/> {selectedActionCategory.is_blanket_po ? 'Recommended Strategy' : `Recommended Targets (${selectedActionCategory.target_suppliers} Suppliers)`}
                                     </div>
                                     <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto">
-                                        {selectedActionCategory.target_suppliers_list.map((s, i) => (
-                                            <div key={i} className="p-2.5 border border-success border-opacity-30 rounded bg-success-bg bg-opacity-20 text-xs">
-                                                <div className="flex justify-between items-start mb-1">
-                                                    <div className="font-bold text-success">{s.supplier_name}</div>
-                                                    <div className="font-bold text-success">Risk: {s.risk_score}/10</div>
+                                        {(selectedActionCategory.target_suppliers_list || []).length > 0 ? (
+                                            selectedActionCategory.target_suppliers_list.map((s, i) => (
+                                                <div key={i} className="p-2.5 border border-success border-opacity-30 rounded bg-success-bg bg-opacity-20 text-xs">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div className="font-bold text-success">{s.supplier_name}</div>
+                                                        <div className="font-bold text-success">Risk: {s.risk_score}/10</div>
+                                                    </div>
+                                                    <div className="flex justify-between text-secondary">
+                                                        <span>Current Vol: {formatCurrency(s.spend)}</span>
+                                                        <span className="font-bold">Proposed Target</span>
+                                                    </div>
+                                                    <div className="mt-2 pt-2 border-t border-success border-opacity-20 text-[10px] text-success font-bold">
+                                                        Estimated Capacity Threshold: {formatCurrency(selectedActionCategory.suppliers.reduce((acc, curr) => acc + curr.spend, 0) / selectedActionCategory.target_suppliers)}
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between text-secondary">
-                                                    <span>Current Vol: {formatCurrency(s.spend)}</span>
-                                                    <span className="font-bold">Proposed Target</span>
-                                                </div>
-                                                <div className="mt-2 pt-2 border-t border-success border-opacity-20 text-[10px] text-success font-bold">
-                                                    Estimated Capacity Threshold: {formatCurrency(selectedActionCategory.suppliers.reduce((acc, curr) => acc + curr.spend, 0) / selectedActionCategory.target_suppliers)}
-                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-4 bg-success-bg bg-opacity-10 text-success text-xs leading-relaxed">
+                                                <strong>Optimization Strategy:</strong>
+                                                <p className="mt-1">
+                                                    {selectedActionCategory.is_blanket_po 
+                                                        ? "Aggregation of recurring volumes under a single master agreement to leverage volume-based discounting." 
+                                                        : "Strategic RFQ to consolidate fragmented spend and eliminate high-risk/low-volume suppliers."}
+                                                </p>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
                                 </div>
 
@@ -1448,8 +1495,8 @@ const AdminDashboard = () => {
                                     <div className="card p-5 border bg-white shadow-sm flex flex-col gap-4 animate-scaleIn">
                                         <div className="flex justify-between items-start border-b pb-3">
                                             <div>
-                                                <div className="text-xs font-bold text-tertiary">REQUEST FOR QUOTATION (DRAFT)</div>
-                                                <div className="text-base font-bold text-primary">RFQ-2024-{selectedActionCategory.category.substring(0,3).toUpperCase()}-001</div>
+                                                <div className="text-xs font-bold text-tertiary">{selectedActionCategory.is_blanket_po ? 'BLANKET PURCHASE ORDER (DRAFT)' : 'REQUEST FOR QUOTATION (DRAFT)'}</div>
+                                                <div className="text-base font-bold text-primary">{selectedActionCategory.is_blanket_po ? 'BPO' : 'RFQ'}-2024-{selectedActionCategory.category.substring(0,3).toUpperCase()}-001</div>
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-[10px] font-bold text-secondary">DATE</div>
@@ -1457,18 +1504,18 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                         <div className="text-xs leading-relaxed text-secondary">
-                                            <p className="mb-2">We are inviting you to participate in a consolidation RFQ for the <strong>{selectedActionCategory.category}</strong> category.</p>
-                                            <p className="mb-2"><strong>Total Estimated Annual Volume:</strong> {formatCurrency(selectedActionCategory.suppliers.reduce((acc, curr) => acc + curr.spend, 0))}</p>
-                                            <p className="mb-4">Please submit your best commercial offer and capacity commitment within 7 business days.</p>
+                                            <p className="mb-2">We are {selectedActionCategory.is_blanket_po ? 'issuing a draft Blanket Purchase Order' : 'inviting you to participate in a consolidation RFQ'} for the <strong>{selectedActionCategory.category}</strong> category.</p>
+                                            <p className="mb-2"><strong>Total Estimated Annual Volume:</strong> {formatCurrency(selectedActionCategory.spend || (selectedActionCategory.suppliers || []).reduce((acc, curr) => acc + curr.spend, 0))}</p>
+                                            <p className="mb-4">{selectedActionCategory.is_blanket_po ? 'This agreement will cover all standard requirements for the next 12 months.' : 'Please submit your best commercial offer and capacity commitment within 7 business days.'}</p>
                                             <div className="p-3 bg-surface rounded border text-[10px]">
-                                                <div className="font-bold mb-1">Submission Deadline:</div>
-                                                <div>{new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
+                                                <div className="font-bold mb-1">{selectedActionCategory.is_blanket_po ? 'Contract Period:' : 'Submission Deadline:'}</div>
+                                                <div>{selectedActionCategory.is_blanket_po ? '01/06/2024 - 31/05/2025' : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
                                             </div>
                                         </div>
                                         <div className="flex justify-end pt-2">
                                             {rfqStatus === 'sent' ? (
                                                 <div className="text-success font-bold text-sm flex items-center gap-2 bg-success-bg px-3 py-1.5 rounded-lg border border-success">
-                                                    <CheckCircle size={16}/> RFQ Dispatched to {selectedActionCategory.target_suppliers} Targets
+                                                    <CheckCircle size={16}/> {selectedActionCategory.is_blanket_po ? 'BPO Dispatched to Supplier' : `RFQ Dispatched to ${selectedActionCategory.target_suppliers} Targets`}
                                                 </div>
                                             ) : (
                                                 <button 
@@ -1480,7 +1527,7 @@ const AdminDashboard = () => {
                                                         }, 1200);
                                                     }}
                                                 >
-                                                    {rfqStatus === 'sending' ? 'Dispatching...' : 'Confirm & Send RFQ'} <Send size={16}/>
+                                                    {rfqStatus === 'sending' ? 'Dispatching...' : (selectedActionCategory.is_blanket_po ? 'Confirm & Send BPO' : 'Confirm & Send RFQ')} <Send size={16}/>
                                                 </button>
                                             )}
                                         </div>
@@ -1499,7 +1546,7 @@ const AdminDashboard = () => {
                                         setTimeout(() => { setRfqStatus('preview'); }, 1200);
                                     }}
                                 >
-                                    Generate RFQ Pack <Send size={16}/>
+                                    {selectedActionCategory.is_blanket_po ? 'Generate BPO Document' : 'Generate RFQ Pack'} <Send size={16}/>
                                 </button>
                             </div>
                         )}
@@ -1512,7 +1559,7 @@ const AdminDashboard = () => {
                                         setTimeout(() => { setRfqStatus('sent'); }, 1500);
                                     }}
                                 >
-                                    Confirm & Dispatch RFQ <CheckCircle size={18}/>
+                                    {selectedActionCategory.is_blanket_po ? 'Confirm & Dispatch BPO' : 'Confirm & Dispatch RFQ'} <CheckCircle size={18}/>
                                 </button>
                             </div>
                         )}
