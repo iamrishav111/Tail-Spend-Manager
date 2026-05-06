@@ -6,7 +6,11 @@ load_dotenv()
 
 # --- Core Configurations ---
 SHEET_ID = '1m7xHT4bjK4Hp73TJ_RQaYx18XBW5qjbswO2Td1A7Dpg'
+# --- AI Configuration ---
+ENABLE_AI_ADVICE = True    # Master toggle for AI
+AI_PROVIDER = "groq"       # Options: "gemini", "groq"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # AI & Classification Thresholds
 # Minimum score (0-1) for AI prediction
@@ -75,7 +79,7 @@ UNCONTROLLED_MIN_SPEND = 100000          # Min spend (₹1L) to flag uncontrolle
 
 # --- Demand Forecast Logic ---
 PREDICTED_TAIL_TREND_MULTIPLIER = 1.05  # 5% buffer for future tail spend
-MIN_PLANTS_FOR_POOLING = 2             # Min plants needed to flag a pooling opportunity
+MIN_PLANTS_FOR_POOLING = 3             # Min plants needed to flag a pooling opportunity
 MAX_REORDER_DAYS_FOR_POOLING = 60      # Max reorder frequency for pooling
 RECURRING_TAIL_THRESHOLD_DAYS = 14     # Items ordered more often than this are "Recurring"
 ESTIMATED_POOLING_SAVINGS_PCT = 0.15   # 15% assumed savings for new pooling

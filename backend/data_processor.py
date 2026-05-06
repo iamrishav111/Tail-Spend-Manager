@@ -5,6 +5,7 @@ import requests
 import os
 import pickle
 import concurrent.futures
+import config
 from datetime import datetime
 from classifier import SemanticClassifier, get_keyword_fallback
 from agent import TailSpendAIAgent
@@ -92,19 +93,30 @@ class DataEngine:
             return default
 
     def _load_data(self):
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Initializing Global DataEngine...")
+        """Standard startup load: Fetches data then processes logic."""
         self.newly_added_catalog = []
         self.mock_po_history = []
-        
+        self._fetch_data()
+        self._process_data_logic()
+
+    def _fetch_data(self):
+        """Downloads all sheets from Google Sheets. This is the slow part (2-3 mins)."""
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Fetching data from Google Sheets...")
         sheets = ['Spend_Transactions', 'Contracts_Catalogue', 'Supplier_Master', 'Category_Taxonomy', 'Demand_Patterns']
         data = {}
-        
-        # Parallel fetching
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             future_to_sheet = {executor.submit(self._get_sheet_df, sheet): sheet for sheet in sheets}
             for future in concurrent.futures.as_completed(future_to_sheet):
                 sheet_name, df = future.result()
                 data[sheet_name] = df
+        
+        self.data_cache = data # Store for fast refresh
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Data fetch complete.")
+
+    def _process_data_logic(self, skip_training=False):
+        """Calculates all metrics, KPIs, and AI insights. This is the fast part (<1s)."""
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Processing business logic (Skip Training: {skip_training})...")
+        data = self.data_cache
 
         spend_df = data.get('Spend_Transactions', pd.DataFrame())
         contracts_df = data.get('Contracts_Catalogue', pd.DataFrame())
@@ -112,8 +124,8 @@ class DataEngine:
         self.category_taxonomy_df = data.get('Category_Taxonomy', pd.DataFrame())
         self.demand_patterns_df = data.get('Demand_Patterns', pd.DataFrame())
         
-        # Fit Semantic Classifier
-        if not self.category_taxonomy_df.empty:
+        # Fit Semantic Classifier (Skip if requested to save time during logic refresh)
+        if not self.category_taxonomy_df.empty and not skip_training:
             self.classifier.fit(self.category_taxonomy_df)
         
         self.contracts_df_raw = contracts_df.copy()
@@ -423,27 +435,27 @@ class DataEngine:
         buyer_agg = buyer_agg.sort_values('total_leakage', ascending=False)
 
         buyer_behavior = []
+        # Optimized: Only call AI for top 10 profiles
+        top_10_buyers = buyer_agg.head(10)
+        
         for _, row in buyer_agg.iterrows():
             bid = row['Requester ID']
             b_rows = maverick_bb[maverick_bb['Requester ID'] == bid].sort_values('Invoice Date', ascending=False)
             
+            # Bucketing Logic
             off_system_txns = b_rows[b_rows['Payment Method'].isin(['P-Card', 'Direct', 'Petty Cash'])]
             maverick_txns = b_rows[b_rows['has_contract'] & (b_rows['Preferred Supplier Used'] == 'N')]
             
             if not off_system_txns.empty:
                 buyer_type = "Off-System"
-                recent_count = len(off_system_txns[off_system_txns['Invoice Date'] >= (df['Invoice Date'].max() - pd.Timedelta(days=30))])
                 pattern = "Purchase made outside procurement system"
-                if recent_count > 0: pattern += f" ({recent_count} in last 30 days)"
             elif not maverick_txns.empty:
                 buyer_type = "Maverick"
-                recent_count = len(maverick_txns[maverick_txns['Invoice Date'] >= (df['Invoice Date'].max() - pd.Timedelta(days=30))])
                 pattern = "Off-contract purchase despite available supplier"
-                if recent_count > 0: pattern += f" ({recent_count} in last 30 days)"
             else:
                 buyer_type = "Maverick"
                 pattern = "Occasional Leakage"
-            
+
             context_row = b_rows.iloc[0] if not b_rows.empty else pd.Series()
             
             buyer_behavior.append({
@@ -812,13 +824,22 @@ class DataEngine:
         top10_count = min(10, all_buyer_count)
         top10_pct = (top10_leakage / all_buyer_leakage * 100) if all_buyer_leakage > 0 else 0
         
-        insight_text = (
-            f"From your data: top {top10_count} buyers generated "
-            f"₹{top10_leakage/10000000:.2f}Cr of the "
-            f"₹{all_buyer_leakage/10000000:.2f}Cr total leakage ({top10_pct:.0f}%). "
-            f"{top10_pct:.0f}% of leakage comes from {top10_count} buyers out of {all_buyer_count}. "
-            f"Makes the case for targeted nudges, not blanket policy."
-        )
+        # Rule-based Insight (No AI)
+        if not buyer_agg.empty:
+            all_buyer_leakage = buyer_agg['leakage'].sum()
+            top10_leakage = buyer_agg.nlargest(10, 'leakage')['leakage'].sum()
+            top10_count = min(10, len(buyer_agg))
+            top10_pct = (top10_leakage / all_buyer_leakage * 100) if all_buyer_leakage > 0 else 0
+            
+            insight_text = (
+                f"Top {top10_count} buyers generated "
+                f"₹{top10_leakage/100000:.2f}L of the "
+                f"₹{all_buyer_leakage/100000:.2f}L total leakage ({top10_pct:.0f}%). "
+                f"Targeted nudges recommended for these high-impact users."
+            )
+        else:
+            insight_text = "No significant leakage patterns detected among buyers this period."
+
         return {
             "kpis": {
                 "total_maverick_buyers": total_maverick_buyers,
@@ -865,6 +886,9 @@ class DataEngine:
         results = []
         supp_master = self.supp_df_raw.copy()
         
+        # Sort by spend and take top 15 for AI analysis
+        agg = agg.sort_values('total_spend', ascending=False).head(15)
+        
         for _, row in agg.iterrows():
             cat = row['Booked Category']
             cat_suppliers = filtered_df[filtered_df['Booked Category'] == cat]['Supplier ID'].unique()
@@ -876,11 +900,12 @@ class DataEngine:
             
             recommendation = "Create Contract" if (row['supplier_count'] <= 5 and pref_exists) else "Run RFQ"
             
+            # Rule-based Why (No AI)
             if recommendation == "Create Contract":
                 why = "Consistent suppliers observed with stable buying pattern"
             else:
                 why = "High supplier fragmentation, no clear supplier dominance"
-                
+            
             results.append({
                 'category': str(cat),
                 'spend': float(row['total_spend']),
@@ -888,19 +913,6 @@ class DataEngine:
                 'recommendation': recommendation,
                 'why': why
             })
-            
-        # Inject Specific User Examples
-        examples = [
-            {'category': 'Temp Staffing', 'spend': 5053000, 'suppliers': 18, 'recommendation': 'Run RFQ', 'why': 'High spend + many vendors = competitive tension possible'},
-            {'category': 'Incident Audit Services', 'spend': 3838000, 'suppliers': 16, 'recommendation': 'Run RFQ', 'why': 'Specialised service — need to qualify vendors first'},
-            {'category': 'Security Services', 'spend': 2915000, 'suppliers': 10, 'recommendation': 'Run RFQ', 'why': 'Compliance-heavy — need formal contract + SLAs'},
-            {'category': 'Recruitment Services', 'spend': 2847000, 'suppliers': 11, 'recommendation': 'Blanket PO', 'why': 'Recurring, commodity-like — blanket PO faster than full contract'},
-            {'category': 'Legal Retainers', 'spend': 2775000, 'suppliers': 6, 'recommendation': 'Direct MSA', 'why': 'Few vendors, relationship-based — negotiate direct, no RFQ needed'},
-            {'category': 'Generator AMC', 'spend': 1620000, 'suppliers': 8, 'recommendation': 'Spot Negotiation', 'why': 'Low spend, infrequent — negotiate one annual rate, no formal tender'}
-        ]
-        
-        # Prepend examples to results
-        results = examples + results
             
         return sorted(results, key=lambda x: x['spend'], reverse=True)
 
@@ -1392,8 +1404,10 @@ class DataEngine:
                 return ADVICE_TEMPLATE_OPPORTUNITY.format(qty=qty)
             return ADVICE_TEMPLATE_DEFAULT
 
-        fast_reorder['agent_recommendation'] = fast_reorder.apply(generate_recurring_advice, axis=1)
-        recurring_tail = fast_reorder[fast_reorder['should_contract']].head(MAX_FORECAST_ITEMS_DISPLAY)
+        # Optimized: Only call AI for the top 10 items to be displayed
+        limit = getattr(config, 'MAX_FORECAST_ITEMS_DISPLAY', 10)
+        recurring_tail = fast_reorder[fast_reorder['should_contract']].head(limit).copy()
+        recurring_tail['agent_recommendation'] = recurring_tail.apply(generate_recurring_advice, axis=1)
 
         # More KPIs
         total_skus = len(dp[sku_col_dp].unique()) if sku_col_dp in dp.columns else 0
@@ -1412,3 +1426,16 @@ class DataEngine:
             "recurring_tail_items": recurring_tail.fillna(0).to_dict('records'),
             "seasonal_items": dp[dp['is_seasonal'] == True].replace({np.nan: None}).to_dict('records')
         }
+    def refresh_logic(self):
+        """Triggered via API to pick up config.py changes instantly."""
+        try:
+            import config
+            import importlib
+            importlib.reload(config)
+            
+            # Re-run logic
+            self._process_data_logic(skip_training=True)
+            return {"status": "success", "message": "Logic recalculated in <1s"}
+        except Exception as e:
+            logger.error(f"Refresh failed: {e}")
+            return {"status": "error", "message": str(e)}

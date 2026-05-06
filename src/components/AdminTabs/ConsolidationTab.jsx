@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertOctagon, Search, Zap, X, CheckCircle, ShieldCheck, TrendingUp, AlertTriangle, Send, Loader, Package, Activity } from 'lucide-react';
+import { AlertOctagon, Search, Zap, X, CheckCircle, ShieldCheck, TrendingUp, AlertTriangle, Send, Loader, Package, Activity, Info } from 'lucide-react';
 
 const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, catalogRecommendations }) => {
   const [consolidationSearch, setConsolidationSearch] = useState('');
@@ -27,19 +27,23 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
       </div>
 
       <div id="consolidation-kpis" className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="kpi-card kpi-card-primary p-4">
+        <div className="kpi-card kpi-card-primary p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="Total number of tail categories analyzed for consolidation." />
           <div className="text-sm font-semibold text-primary mb-1">Categories Analyzed</div>
           <div className="text-2xl font-bold">{consKpis.total_categories}</div>
         </div>
-        <div className="kpi-card kpi-card-warning p-4">
+        <div className="kpi-card kpi-card-warning p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-warning opacity-30 group-hover:opacity-100 transition-opacity" title="Unique suppliers identified within tail spend categories." />
           <div className="text-sm font-semibold text-warning mb-1">Tail Suppliers</div>
           <div className="text-2xl font-bold">{consKpis.tail_suppliers}</div>
         </div>
-        <div className="kpi-card kpi-card-danger p-4">
+        <div className="kpi-card kpi-card-danger p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="Number of redundant suppliers that can be eliminated through consolidation." />
           <div className="text-sm font-semibold text-danger mb-1">Can Be Removed</div>
           <div className="text-2xl font-bold">{consKpis.suppliers_removable}</div>
         </div>
-        <div className="kpi-card kpi-card-success p-4">
+        <div className="kpi-card kpi-card-success p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-success opacity-30 group-hover:opacity-100 transition-opacity" title="Estimated annual savings achievable by consolidating tail suppliers." />
           <div className="text-sm font-semibold text-success mb-1">Potential Savings</div>
           <div className="text-2xl font-bold">{formatCurrency(consKpis.potential_savings)}</div>
         </div>

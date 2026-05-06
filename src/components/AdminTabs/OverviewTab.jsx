@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, AlertOctagon, Package, Users, AlertTriangle, Zap, BarChart2, Activity, Search, Filter, UserCheck, Mail, ChevronLeft, ChevronRight, Loader } from 'lucide-react';
+import { TrendingUp, AlertOctagon, Package, Users, AlertTriangle, Zap, BarChart2, Activity, Search, Filter, UserCheck, Mail, ChevronLeft, ChevronRight, Loader, Info } from 'lucide-react';
 
 const OverviewTab = ({ dashboardData, formatCurrency }) => {
   const TABLE_PAGE_SIZE = 10;
@@ -20,28 +20,32 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="kpi-card kpi-card-danger p-4">
+        <div className="kpi-card kpi-card-danger p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="Total annual spend classified as 'Tail Spend' (low value, high volume)." />
           <div className="text-sm font-semibold text-danger mb-1 flex justify-between items-center">
             <span>Total Tail Spend</span>
             <AlertOctagon size={16} />
           </div>
           <div className="text-2xl font-bold">{formatCurrency(dashboardData.kpis?.total_tail_spend || 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-warning p-4">
+        <div className="kpi-card kpi-card-warning p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-warning opacity-30 group-hover:opacity-100 transition-opacity" title="Total spend made outside of preferred/contracted supplier agreements." />
           <div className="text-sm font-semibold text-warning mb-1 flex justify-between items-center">
             <span>Maverick Spend</span>
             <AlertTriangle size={16} />
           </div>
           <div className="text-2xl font-bold">{formatCurrency(dashboardData.kpis?.maverick_spend || 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-primary p-4">
+        <div className="kpi-card kpi-card-primary p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="Percentage of categories that have at least one active supplier contract." />
           <div className="text-sm font-semibold text-primary mb-1 flex justify-between items-center">
             <span>Contract Coverage</span>
             <Package size={16} />
           </div>
           <div className="text-2xl font-bold">{((dashboardData.kpis?.contract_coverage_pct || 0) * 100).toFixed(0)}%</div>
         </div>
-        <div className="kpi-card kpi-card-success p-4">
+        <div className="kpi-card kpi-card-success p-4 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-success opacity-30 group-hover:opacity-100 transition-opacity" title="Total count of unique suppliers contributing to tail spend." />
           <div className="text-sm font-semibold text-success mb-1 flex justify-between items-center">
             <span>Tail Suppliers</span>
             <Users size={16} />

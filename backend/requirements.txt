@@ -7,6 +7,7 @@ scikit-learn
 sentence-transformers
 torch
 google-genai
+groq
 python-dotenv
 google-auth
 google-api-python-client

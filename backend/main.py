@@ -93,6 +93,10 @@ def add_to_catalog(item_data: dict):
 def get_purchase_history():
     return {"status": "success", "data": engine.get_purchase_history()}
 
+@app.post("/api/admin/refresh-logic")
+def refresh_logic():
+    return engine.refresh_logic()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LogOut, TrendingUp, AlertOctagon, Package, DollarSign, UserCheck, LayoutGrid, Loader, ShieldAlert } from 'lucide-react';
+import { LogOut, TrendingUp, AlertOctagon, Package, DollarSign, UserCheck, LayoutGrid, Loader, ShieldAlert, RefreshCcw } from 'lucide-react';
 
 import OverviewTab from '../components/AdminTabs/OverviewTab';
 import SavingsLeakageTab from '../components/AdminTabs/SavingsLeakageTab';
@@ -85,6 +85,27 @@ const AdminDashboard = () => {
     
     fetchTab();
   }, [activeTab]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefreshLogic = async () => {
+    setRefreshing(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+      const res = await fetch(`${API_BASE_URL}/api/admin/refresh-logic`, { method: 'POST' });
+      const json = await res.json();
+      if (json.status === 'success') {
+        // Force re-fetch of current tab data
+        const tabMeta = tabs.find(t => t.name === activeTab);
+        const resData = await fetch(`${API_BASE_URL}${tabMeta.endpoint}`);
+        const jsonData = await resData.json();
+        setDashboardData(jsonData.data);
+        alert("Success: Logic refreshed and numbers updated!");
+      }
+    } catch (e) {
+      alert("Error refreshing logic: " + e.message);
+    }
+    setRefreshing(false);
+  };
 
   const formatCurrency = (value) => {
     if (value >= 10000000) return `₹${(value / 10000000).toFixed(2)} Cr`;
@@ -177,6 +198,14 @@ const AdminDashboard = () => {
             <p className="text-secondary font-medium">Enterprise tail spend monitoring and compliance dashboard.</p>
             </div>
             <div className="flex items-center gap-3">
+                <button 
+                  className={`btn btn-outline flex items-center gap-2 border-primary text-primary hover:bg-primary-light ${refreshing ? 'opacity-50 pointer-events-none' : ''}`}
+                  onClick={handleRefreshLogic}
+                  title="Reload numbers instantly from config.py"
+                >
+                    <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} /> 
+                    {refreshing ? 'Refreshing...' : 'Refresh Logic'}
+                </button>
                 <button className="btn btn-outline flex items-center gap-2 border-primary text-primary hover:bg-primary-light" onClick={() => navigate('/admin/purchase-history')}>
                     <Package size={16} /> Orders
                 </button>

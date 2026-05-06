@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Info } from 'lucide-react';
 
 const SavingsLeakageTab = ({ data, formatCurrency }) => {
   const sle = data.savings_leakage_extended || {};
@@ -50,19 +50,23 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
 
       {/* KPI Tiles */}
       <div id="sl-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
-        <div className="kpi-card kpi-card-danger p-3">
+        <div className="kpi-card kpi-card-danger p-3 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="Total spend that exceeded contracted rates in the last 90 days." />
           <div className="text-xs font-semibold text-danger mb-1">Leakage (Last 90d)</div>
           <div className="text-xl font-bold text-danger">{formatCurrency(sle.leakage_last_quarter ?? 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-warning p-3">
+        <div className="kpi-card kpi-card-warning p-3 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-warning opacity-30 group-hover:opacity-100 transition-opacity" title="Count of purchases made outside preferred supplier contracts." />
           <div className="text-xs font-semibold text-warning mb-1">Off-Contract Txns</div>
           <div className="text-xl font-bold">{(sle.off_contract_transactions ?? 0).toLocaleString()}</div>
         </div>
-        <div className="kpi-card kpi-card-success p-3">
+        <div className="kpi-card kpi-card-success p-3 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-success opacity-30 group-hover:opacity-100 transition-opacity" title="Estimated annual savings if all maverick spend is redirected." />
           <div className="text-xs font-semibold text-success mb-1">Total Leakage</div>
           <div className="text-xl font-bold text-danger">{formatCurrency(sle.total_leakage ?? 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-primary p-3">
+        <div className="kpi-card kpi-card-primary p-3 relative group">
+          <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="The primary reason why users are buying outside the contract." />
           <div className="text-xs font-semibold text-primary mb-1">Biggest Root Cause</div>
           <div className="text-sm font-bold truncate" title={sle.biggest_root_cause}>{sle.biggest_root_cause ?? 'N/A'}</div>
           <div className="text-xs text-secondary mt-0.5">by leakage value</div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Package, ShieldCheck, Activity, X, CheckCircle, Zap, AlertTriangle, AlertOctagon, Loader } from 'lucide-react';
+import { Package, ShieldCheck, Activity, X, CheckCircle, Zap, AlertTriangle, AlertOctagon, Loader, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const DemandForecastTab = ({ dashboardData, formatCurrency }) => {
@@ -27,22 +27,26 @@ const DemandForecastTab = ({ dashboardData, formatCurrency }) => {
 
       {/* KPI Tiles */}
       <div id="df-kpis" className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="kpi-card kpi-card-primary p-4">
+          <div className="kpi-card kpi-card-primary p-4 relative group">
+              <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="Projected tail spend for the next 30 days based on historical trends." />
               <div className="text-xs font-semibold text-primary mb-1">Predicted Tail Spend (30d)</div>
               <div className="text-2xl font-bold">{formatCurrency(dfData.kpis.predicted_tail_30d)}</div>
               <div className="text-[10px] text-secondary mt-1">Rolling 30d avg × 1.05 trend</div>
           </div>
-          <div className="kpi-card kpi-card-success p-4">
+          <div className="kpi-card kpi-card-success p-4 relative group">
+              <Info size={14} className="absolute top-2 right-2 text-success opacity-30 group-hover:opacity-100 transition-opacity" title="Immediate opportunities to pool demand across different plants." />
               <div className="text-xs font-semibold text-success mb-1">Pool Opportunities Now</div>
               <div className="text-2xl font-bold">{dfData.kpis.pool_opportunities}</div>
               <div className="text-[10px] text-secondary mt-1">Same SKU, 2+ plants, reorder ≤30d</div>
           </div>
-          <div className="kpi-card kpi-card-warning p-4">
+          <div className="kpi-card kpi-card-warning p-4 relative group">
+              <Info size={14} className="absolute top-2 right-2 text-warning opacity-30 group-hover:opacity-100 transition-opacity" title="Percentage of unique tail SKUs that are covered by preferred supplier contracts." />
               <div className="text-xs font-semibold text-warning mb-1 flex items-center gap-1"><ShieldCheck size={13}/>Preferred Supplier Coverage</div>
               <div className="text-2xl font-bold">{dfData.kpis.supplier_coverage_pct?.toFixed(1)}%</div>
               <div className="text-[10px] text-secondary mt-1">Unique SKUs under active contract</div>
           </div>
-          <div className="kpi-card kpi-card-danger p-4">
+          <div className="kpi-card kpi-card-danger p-4 relative group">
+              <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="High-frequency tail items that appear regularly but lack a formal contract." />
               <div className="text-xs font-semibold text-danger mb-1">Recurring Tail Needing Contract</div>
               <div className="text-2xl font-bold">{dfData.kpis.recurring_tail_needing_contract}</div>
               <div className="text-[10px] text-secondary mt-1">Reorder ≤14d + appears in tail</div>
