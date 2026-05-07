@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+venv/
+ENV/
+.cache/
+.git/
+.gitignore
+*.pkl
+out.json
+test_*.py
+debug_*.py
