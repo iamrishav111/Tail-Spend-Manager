@@ -1,82 +1,119 @@
-# Tail Spend Manager - AI-Powered Procurement Analytics
+# 🚀 Tail Spend Manager - Onboarding Guide
 
-An advanced, AI-driven dashboard for analyzing and optimizing Tail Spend, Savings Leakage, and Demand Forecasting.
+Welcome to the **Tail Spend Control Tower**! This project is an advanced, AI-powered dashboard designed to help procurement teams manage "Tail Spend" (high-volume, low-value purchases), find hidden savings, and automate supplier recommendations.
 
-## 🚀 Getting Started
-
-Follow these instructions to get the project up and running on your local machine.
-
-### 1. Prerequisites
-Ensure you have the following installed:
-*   **Node.js** (v18 or higher): [Download here](https://nodejs.org/)
-*   **Python** (v3.9 or higher): [Download here](https://www.python.org/)
-*   **Groq API Key**: [Get it here](https://console.groq.com/)
+This guide will walk you through setting up the system from scratch, even if you have no technical background.
 
 ---
 
-### 2. Frontend Setup (React + Vite)
-1.  Open a terminal in the root directory.
-2.  Install Javascript dependencies:
+## 📋 1. Prerequisites (What you need to install)
+
+Before running the code, you need two main tools installed on your computer:
+
+1.  **Node.js**: This runs the dashboard interface (the visual part).
+    *   [Download and Install Node.js](https://nodejs.org/en/download/) (Choose the "LTS" version).
+2.  **Python**: This runs the "brain" of the system (data processing and AI).
+    *   [Download and Install Python](https://www.python.org/downloads/) (Version 3.9 or higher).
+    *   **Important**: During installation, make sure to check the box that says **"Add Python to PATH"**.
+
+---
+
+## 🔑 2. Setting Up Your API Keys
+
+The system uses **Groq** for AI intelligence and **Google Sheets** for data. You need to tell the code where to find these.
+
+1.  **Get a Groq API Key**:
+    *   Go to [Groq Console](https://console.groq.com/).
+    *   Create a free account and generate an API key.
+2.  **Create your Environment File**:
+    *   Inside the project folder, go into the `backend` folder.
+    *   Find a file named `.env` (if it doesn't exist, create a new text file and name it exactly `.env`).
+    *   Open it in a text editor (like Notepad) and paste your keys like this:
+        ```text
+        GROQ_API_KEY=your_actual_key_here
+        SHEET_ID=1m7xHT4bjK4Hp73TJ_RQaYx18XBW5qjbswO2Td1A7Dpg
+        ```
+    *   *Note: The SHEET_ID provided above is the default demonstration sheet.*
+
+---
+
+## 🛠️ 3. Installation (One-time Setup)
+
+You need to install the "libraries" the code uses. Follow these steps:
+
+### Part A: Install Dashboard Components (Frontend)
+1.  Open a terminal or command prompt in the **main folder** of the project.
+2.  Type the following and press Enter:
     ```bash
     npm install
     ```
-3.  Start the development server:
-    ```bash
-    npm run dev
-    ```
-    The frontend will be available at `http://localhost:5173`.
+    *Wait for it to finish. You only need to do this once.*
 
----
-
-### 3. Backend Setup (Python + FastAPI)
-1.  Navigate to the `backend` folder:
+### Part B: Install Logic Components (Backend)
+1.  In the same terminal (or a new one), move into the backend folder:
     ```bash
     cd backend
     ```
-2.  Create a virtual environment (optional but recommended):
-    ```bash
-    python -m venv venv
-    venv\Scripts\activate
-    ```
-3.  Install Python dependencies:
+2.  Type the following and press Enter:
     ```bash
     pip install -r requirements.txt
     ```
-4.  **Configure Environment Variables**:
-    *   Create a file named `.env` in the `backend/` folder.
-    *   Add your Groq API Key:
-        ```text
-        GROQ_API_KEY=your_key_here
-        ```
-5.  **Google Sheets Integration**:
-    *   Ensure your `credentials.json` for the Google Sheets API is placed in the `backend/` folder.
-    *   The `SHEET_ID` is pre-configured in `config.py`.
+    *This installs all the "brain" components like AI and data tools.*
 
-6.  Start the backend server:
+---
+
+## 🏃 4. How to Run the System
+
+To see the dashboard, you need to have **two terminals** running at the same time (one for the visuals, one for the brain).
+
+### Step 1: Start the Dashboard (Visuals)
+1.  Open a terminal in the project's **main folder**.
+2.  Type:
+    ```bash
+    npm run dev
+    ```
+3.  The terminal will give you a link (usually `http://localhost:5173`). **Keep this terminal open!**
+
+### Step 2: Start the Brain (Backend)
+1.  Open a **second terminal** and navigate to the `backend` folder:
+    ```bash
+    cd backend
+    ```
+2.  Type:
     ```bash
     python main.py
     ```
-    The backend will be available at `http://localhost:8000`.
+3.  You should see "Backend ready." **Keep this terminal open too!**
 
 ---
 
-## 🛠 Project Structure
-*   `backend/config.py`: The control center for all business logic, thresholds, and AI weights.
-*   `backend/agent.py`: Contains the AI Reasoning Agents (Intake, Optimization, Dashboard).
-*   `backend/data_processor.py`: The core DataEngine that processes Google Sheets data into analytics.
-*   `src/components/AdminTabs/`: React components for each dashboard tab (Savings, Demand, Consolidation).
+## 📊 5. Using the Dashboard
 
-## 💡 Key Features
-*   **Savings Leakage**: Identifies Maverick spend and root causes.
-*   **Demand Forecast**: AI-driven supply planning and supplier recommendations.
-*   **Consolidation**: Strategic vendor reduction to maximize volume leverage.
-*   **Dynamic AI Agent**: Real-time contextual advice powered by Groq Llama 3.1 8B.
+Now, open your web browser and go to `http://localhost:5173`.
 
-## ⚙️ Customization
-You can tune the system's "intelligence" by editing `backend/config.py`. You can change:
-*   Savings factors (e.g., 12% consolidation saving).
-*   AI weights for supplier scoring (Price vs. Risk vs. Lead Time).
-*   Alert thresholds for spend leakage.
+### Key Tabs to Explore:
+*   **Overview**: A bird's eye view of your spend. Check out the new **Tail Spend Explorer** at the bottom to filter by Supplier or Category.
+*   **Savings Leakage**: See where money is being "leaked" because people aren't using contracts. Look for the **Red Alerts**.
+*   **Demand Forecast**: See what you need to buy next and where you can consolidate orders to save money.
+*   **Consolidation**: Strategic advice on which suppliers to remove and which to keep.
 
 ---
-*Created with ❤️ for Advanced Procurement Teams.*
+
+## ⚙️ 6. How to Customize the Business Rules
+
+You don't need to be a coder to change how the dashboard thinks.
+1.  Open `backend/config.py` in Notepad.
+2.  You can change values like:
+    *   `AUTO_APPROVAL_THRESHOLD`: Change the ₹ limit for automatic approval.
+    *   `CONSOLIDATION_SAVINGS_FACTOR`: Adjust the estimated % savings (e.g., 0.12 for 12%).
+    *   `DASHBOARD_LOOKBACK_DAYS`: Change how many days of history the dashboard shows.
+
+---
+
+## ❓ Troubleshooting
+*   **"Python not found"**: Ensure you checked "Add to PATH" during Python installation.
+*   **"Blank Dashboard"**: Make sure the **Backend terminal** is running and says "Backend ready."
+*   **"API Error"**: Double-check your `GROQ_API_KEY` in the `backend/.env` file.
+
+---
+*Developed for advanced procurement optimization.*
