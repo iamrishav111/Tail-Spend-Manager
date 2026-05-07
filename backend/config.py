@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- Core Configurations ---
-SHEET_ID = '1m7xHT4bjK4Hp73TJ_RQaYx18XBW5qjbswO2Td1A7Dpg'
+SHEET_ID = os.getenv("SHEET_ID", "")
 # --- AI Configuration ---
 ENABLE_AI_ADVICE = True    # Master toggle for AI
 AI_PROVIDER = "groq"       # Options: "gemini", "groq"

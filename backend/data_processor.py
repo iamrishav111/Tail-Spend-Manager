@@ -784,6 +784,28 @@ class DataEngine:
         self.p80_map = p80_map
         self.df_main = df
 
+        # --- Tail Suppliers by Cost Centre (for new Overview table) ---
+        tail_df_cc = df[df['is_tail']].copy()
+        if not tail_df_cc.empty and 'Cost Centre' in tail_df_cc.columns:
+            cc_group = tail_df_cc.groupby('Cost Centre').agg(
+                tail_spend=('Amount', 'sum'),
+                supplier_count=('Supplier ID', 'nunique'),
+                txn_count=('Invoice ID', 'count')
+            ).reset_index().sort_values('tail_spend', ascending=False)
+            self.tail_cost_centre_data = cc_group.rename(columns={'Cost Centre': 'cost_centre'}).to_dict(orient='records')
+        else:
+            self.tail_cost_centre_data = []
+
+        # --- Flat filterable tail rows (Supplier ID / Category / Cost Centre / Tail Spend) ---
+        if not tail_df_cc.empty and all(c in tail_df_cc.columns for c in ['Supplier ID', 'Booked Category', 'Cost Centre']):
+            flat_group = tail_df_cc.groupby(['Supplier ID', 'Booked Category', 'Cost Centre']).agg(
+                tail_spend=('Amount', 'sum')
+            ).reset_index().sort_values('tail_spend', ascending=False).head(200)
+            flat_group = flat_group.rename(columns={'Booked Category': 'category', 'Cost Centre': 'cost_centre', 'Supplier ID': 'supplier_id'})
+            self.tail_filter_data = flat_group.to_dict(orient='records')
+        else:
+            self.tail_filter_data = []
+
     # --- Endpoints ---
     def get_dashboard_kpis(self):
         return {
@@ -791,7 +813,9 @@ class DataEngine:
             "root_causes": self.root_causes,
             "category_analysis": self.category_analysis_summary,
             "plant_analysis": self.plant_analysis,
-            "top_spends_category": self.top_spends_category
+            "top_spends_category": self.top_spends_category,
+            "tail_cost_centre_data": getattr(self, 'tail_cost_centre_data', []),
+            "tail_filter_data": getattr(self, 'tail_filter_data', [])
         }
         
     def get_savings_leakage(self):

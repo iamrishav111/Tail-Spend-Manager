@@ -7,11 +7,36 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
   const [plantPage, setPlantPage] = useState(1);
   const PAGE_SIZE = 5;
 
+  // Live feed sort state — default: date desc, then leakage desc
+  const [liveSort, setLiveSort] = useState('date');
+  const [liveSortDesc, setLiveSortDesc] = useState(true);
+
   const catItems = sle.leakage_category_wise || [];
   const plantItems = sle.leakage_plant_wise || [];
   const rootCauseItems = sle.leakage_by_root_cause || [];
-  // Filter out leakage=0 from live feed
-  const liveItems = (sle.live_alert_feed || []).filter(f => f.leakage > 0);
+  // Filter out leakage=0 from live feed, then sort
+  const rawLiveItems = (sle.live_alert_feed || []).filter(f => f.leakage > 0);
+  const liveItems = [...rawLiveItems].sort((a, b) => {
+    let valA, valB;
+    if (liveSort === 'date') {
+      valA = a.invoice_date || '';
+      valB = b.invoice_date || '';
+    } else if (liveSort === 'leakage') {
+      valA = a.leakage || 0;
+      valB = b.leakage || 0;
+    } else { // amount
+      valA = a.amount || 0;
+      valB = b.amount || 0;
+    }
+    if (valA < valB) return liveSortDesc ? 1 : -1;
+    if (valA > valB) return liveSortDesc ? -1 : 1;
+    return 0;
+  });
+
+  const handleLiveSort = (col) => {
+    if (liveSort === col) setLiveSortDesc(d => !d);
+    else { setLiveSort(col); setLiveSortDesc(true); }
+  };
 
   const severityClass = (action = '') => {
     if (action.startsWith('CRITICAL')) return 'text-danger font-bold';
@@ -75,21 +100,29 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
 
       {/* Live Alert Feed */}
       <div id="sl-live" className="card p-0 overflow-hidden border-t-4" style={{ borderTopColor: '#ef4444' }}>
-        <div className="p-3 border-b bg-danger-bg flex items-center gap-2">
-          <Activity size={16} className="text-danger animate-pulse" />
-          <h3 className="mb-0 text-danger text-sm font-bold">Live Alert Feed — Recent Maverick Transactions (Leakage &gt; 0)</h3>
+        <div className="p-3 border-b bg-danger-bg flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Activity size={16} className="text-danger animate-pulse" />
+            <h3 className="mb-0 text-danger text-sm font-bold">Live Alert Feed — Recent Maverick Transactions (Leakage &gt; 0)</h3>
+          </div>
         </div>
         <div className="table-container border-none" style={{ borderRadius: 0, maxHeight: '260px', overflowY: 'auto' }}>
           <table>
             <thead style={{ position: 'sticky', top: 0 }}>
               <tr>
                 <th>Invoice ID</th>
-                <th>Date</th>
+                <th className="cursor-pointer select-none" onClick={() => handleLiveSort('date')}>
+                  Date {liveSort === 'date' ? (liveSortDesc ? '▼' : '▲') : '↕'}
+                </th>
                 <th>Requester</th>
                 <th>Supplier</th>
                 <th>Category</th>
-                <th className="numeric">Amount</th>
-                <th className="numeric text-danger">Leakage ₹</th>
+                <th className="numeric cursor-pointer select-none" onClick={() => handleLiveSort('amount')}>
+                  Amount {liveSort === 'amount' ? (liveSortDesc ? '▼' : '▲') : '↕'}
+                </th>
+                <th className="numeric text-danger cursor-pointer select-none" onClick={() => handleLiveSort('leakage')}>
+                  Leakage ₹ {liveSort === 'leakage' ? (liveSortDesc ? '▼' : '▲') : '↕'}
+                </th>
               </tr>
             </thead>
             <tbody>

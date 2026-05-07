@@ -1,5 +1,75 @@
-import React, { useState } from 'react';
-import { TrendingUp, AlertOctagon, Package, Users, AlertTriangle, Zap, BarChart2, Activity, Search, Filter, UserCheck, Mail, ChevronLeft, ChevronRight, Loader, Info } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { TrendingUp, AlertOctagon, Package, Users, AlertTriangle, Zap, BarChart2, Activity, Search, Filter, UserCheck, Mail, ChevronLeft, ChevronRight, Loader, Info, Check, ChevronDown } from 'lucide-react';
+
+// Custom Multi-Select Dropdown Component
+const MultiSelectDropdown = ({ label, options, selectedValues, onChange, placeholder }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option) => {
+    if (selectedValues.includes(option)) {
+      onChange(selectedValues.filter(v => v !== option));
+    } else {
+      onChange([...selectedValues, option]);
+    }
+  };
+
+  const isAllSelected = selectedValues.length === 0;
+
+  return (
+    <div className="flex flex-col gap-1 relative" ref={dropdownRef}>
+      <label className="text-xs font-semibold text-secondary">{label}</label>
+      <div 
+        className="input input-bordered input-sm flex items-center justify-between cursor-pointer bg-white overflow-hidden"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className="truncate text-xs pr-4">
+          {isAllSelected ? 'ALL' : `${selectedValues.length} Selected`}
+        </span>
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </div>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-border rounded-md shadow-xl z-50 max-h-60 overflow-y-auto">
+          <div 
+            className={`flex items-center gap-2 p-2 hover:bg-primary-light cursor-pointer text-xs ${isAllSelected ? 'bg-primary-light font-bold' : ''}`}
+            onClick={() => { onChange([]); setIsOpen(false); }}
+          >
+            <div className={`w-4 h-4 border rounded flex items-center justify-center ${isAllSelected ? 'bg-primary border-primary' : 'border-border'}`}>
+              {isAllSelected && <Check size={10} className="text-white" />}
+            </div>
+            ALL
+          </div>
+          {options.map(option => {
+            const isSelected = selectedValues.includes(option);
+            return (
+              <div 
+                key={option}
+                className={`flex items-center gap-2 p-2 hover:bg-primary-light cursor-pointer text-xs ${isSelected ? 'bg-primary-light font-bold' : ''}`}
+                onClick={(e) => { e.stopPropagation(); toggleOption(option); }}
+              >
+                <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-border'}`}>
+                  {isSelected && <Check size={10} className="text-white" />}
+                </div>
+                {option}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const OverviewTab = ({ dashboardData, formatCurrency }) => {
   const TABLE_PAGE_SIZE = 10;
@@ -16,6 +86,40 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
   const [spendSortCol, setSpendSortCol] = useState('amount');
   const [spendSortDesc, setSpendSortDesc] = useState(true);
   const [spendPage, setSpendPage] = useState(1);
+
+  // Tail Suppliers Cost Centre state
+  const [ccSearch, setCcSearch] = useState('');
+  const [ccPage, setCcPage] = useState(1);
+
+  // Filterable tail table state - Now using arrays for multi-select
+  const [filterSuppliers, setFilterSuppliers] = useState([]);
+  const [filterCategories, setFilterCategories] = useState([]);
+  const [filterCostCentres, setFilterCostCentres] = useState([]);
+
+  const tailFilterData = dashboardData.tail_filter_data || [];
+  const tailCostCentreData = dashboardData.tail_cost_centre_data || [];
+
+  // Derive unique dropdown options from raw data
+  const supplierOptions = useMemo(() => Array.from(new Set(tailFilterData.map(r => r.supplier_id))).sort(), [tailFilterData]);
+  const categoryOptions = useMemo(() => Array.from(new Set(tailFilterData.map(r => r.category))).sort(), [tailFilterData]);
+  const costCentreOptions = useMemo(() => Array.from(new Set(tailFilterData.map(r => r.cost_centre))).sort(), [tailFilterData]);
+
+  const filteredTailRows = useMemo(() => {
+    return tailFilterData.filter(r =>
+      (filterSuppliers.length === 0 || filterSuppliers.includes(r.supplier_id)) &&
+      (filterCategories.length === 0 || filterCategories.includes(r.category)) &&
+      (filterCostCentres.length === 0 || filterCostCentres.includes(r.cost_centre))
+    ).slice(0, 10);
+  }, [tailFilterData, filterSuppliers, filterCategories, filterCostCentres]);
+
+  // Cost Centre search + pagination
+  const filteredCC = useMemo(() =>
+    tailCostCentreData.filter(r => r.cost_centre?.toLowerCase().includes(ccSearch.toLowerCase())),
+    [tailCostCentreData, ccSearch]
+  );
+  const ccTotalPages = Math.max(1, Math.ceil(filteredCC.length / TABLE_PAGE_SIZE));
+  const ccCurrentP = Math.min(ccPage, ccTotalPages);
+  const paginatedCC = filteredCC.slice((ccCurrentP - 1) * TABLE_PAGE_SIZE, ccCurrentP * TABLE_PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-6">
@@ -266,6 +370,113 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
                   );
               })()}
           </div>
+      </div>
+
+      {/* NEW: Tail Suppliers by Cost Centre */}
+      <div className="card p-0 overflow-hidden">
+        <div className="p-4 border-b flex justify-between items-center bg-surface" style={{ borderColor: 'var(--color-border)' }}>
+          <h3 className="mb-0">Tail Suppliers — Cost Centre Wise</h3>
+          <input
+            type="text"
+            placeholder="Search cost centre..."
+            className="input input-bordered input-sm"
+            value={ccSearch}
+            onChange={e => { setCcSearch(e.target.value); setCcPage(1); }}
+          />
+        </div>
+        <div className="table-container border-none" style={{ borderRadius: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Cost Centre</th>
+                <th className="numeric">Tail Spend</th>
+                <th className="numeric">Unique Suppliers</th>
+                <th className="numeric">Transactions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedCC.length === 0
+                ? <tr><td colSpan={4} className="text-center text-secondary py-4 text-sm">No data available.</td></tr>
+                : paginatedCC.map((row, i) => (
+                  <tr key={i}>
+                    <td className="font-semibold">{row.cost_centre}</td>
+                    <td className="numeric font-bold text-danger">{formatCurrency(row.tail_spend)}</td>
+                    <td className="numeric text-secondary">{row.supplier_count}</td>
+                    <td className="numeric text-secondary">{row.txn_count}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        {ccTotalPages > 1 && (
+          <div className="p-4 border-t flex justify-between items-center bg-surface">
+            <button className="btn btn-outline text-xs py-1" disabled={ccCurrentP <= 1} onClick={() => setCcPage(p => Math.max(1, p - 1))}>Previous</button>
+            <span className="text-xs font-bold text-secondary">Page {ccCurrentP} of {ccTotalPages}</span>
+            <button className="btn btn-outline text-xs py-1" disabled={ccCurrentP >= ccTotalPages} onClick={() => setCcPage(p => Math.min(ccTotalPages, p + 1))}>Next</button>
+          </div>
+        )}
+      </div>
+
+      {/* NEW: Filterable Tail Spend Explorer */}
+      <div className="card p-0 overflow-hidden">
+        <div className="p-4 border-b bg-surface" style={{ borderColor: 'var(--color-border)' }}>
+          <h3 className="mb-3">Tail Spend Explorer</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <MultiSelectDropdown 
+              label="Supplier ID"
+              options={supplierOptions}
+              selectedValues={filterSuppliers}
+              onChange={setFilterSuppliers}
+            />
+            <MultiSelectDropdown 
+              label="Category"
+              options={categoryOptions}
+              selectedValues={filterCategories}
+              onChange={setFilterCategories}
+            />
+            <MultiSelectDropdown 
+              label="Cost Centre"
+              options={costCentreOptions}
+              selectedValues={filterCostCentres}
+              onChange={setFilterCostCentres}
+            />
+          </div>
+        </div>
+        <div className="table-container border-none" style={{ borderRadius: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Supplier ID</th>
+                <th>Category</th>
+                <th>Cost Centre</th>
+                <th className="numeric">Tail Spend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTailRows.length === 0
+                ? <tr><td colSpan={4} className="text-center text-secondary py-4 text-sm">No matching records. Try changing the filters.</td></tr>
+                : filteredTailRows.map((row, i) => (
+                  <tr key={i}>
+                    <td className="font-bold text-xs text-primary">{row.supplier_id}</td>
+                    <td className="font-semibold text-sm">{row.category}</td>
+                    <td className="text-secondary text-sm">{row.cost_centre}</td>
+                    <td className="numeric font-bold text-danger">{formatCurrency(row.tail_spend)}</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        {(filterSuppliers.length > 0 || filterCategories.length > 0 || filterCostCentres.length > 0) && (
+          <div className="p-3 border-t bg-surface flex justify-between items-center">
+            <span className="text-xs text-secondary">Showing up to 10 rows for selected filters.</span>
+            <button
+              className="btn btn-outline text-xs py-1"
+              onClick={() => { setFilterSuppliers([]); setFilterCategories([]); setFilterCostCentres([]); }}
+            >Clear Filters</button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ Follow these instructions to get the project up and running on your local machin
 Ensure you have the following installed:
 *   **Node.js** (v18 or higher): [Download here](https://nodejs.org/)
 *   **Python** (v3.9 or higher): [Download here](https://www.python.org/)
-*   **Google Gemini API Key**: [Get it here](https://aistudio.google.com/)
+*   **Groq API Key**: [Get it here](https://console.groq.com/)
 
 ---
 
@@ -44,9 +44,9 @@ Ensure you have the following installed:
     ```
 4.  **Configure Environment Variables**:
     *   Create a file named `.env` in the `backend/` folder.
-    *   Add your Gemini API Key:
+    *   Add your Groq API Key:
         ```text
-        GEMINI_API_KEY=your_key_here
+        GROQ_API_KEY=your_key_here
         ```
 5.  **Google Sheets Integration**:
     *   Ensure your `credentials.json` for the Google Sheets API is placed in the `backend/` folder.
@@ -70,7 +70,7 @@ Ensure you have the following installed:
 *   **Savings Leakage**: Identifies Maverick spend and root causes.
 *   **Demand Forecast**: AI-driven supply planning and supplier recommendations.
 *   **Consolidation**: Strategic vendor reduction to maximize volume leverage.
-*   **Dynamic AI Agent**: Real-time contextual advice powered by Google Gemini 2.0.
+*   **Dynamic AI Agent**: Real-time contextual advice powered by Groq Llama 3.1 8B.
 
 ## ⚙️ Customization
 You can tune the system's "intelligence" by editing `backend/config.py`. You can change:

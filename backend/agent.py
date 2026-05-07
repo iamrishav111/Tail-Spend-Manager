@@ -15,7 +15,7 @@ class TailSpendAIAgent:
             try:
                 # Using the lightning-fast Groq Llama 3 engine
                 self.client = Groq(api_key=GROQ_API_KEY)
-                self.model_name = "llama-3.3-70b-versatile"
+                self.model_name = "llama-3.1-8b-instant"
                 self.enabled = True
                 logger.info(f"Groq Llama 3 Agent ({self.model_name}) enabled.")
             except Exception as e:
@@ -257,7 +257,7 @@ intake_agent = LlmAgent(
     name="IntakeClassificationAgent",
     description="Handles purchase requests and P-card feeds. Uses Llama 3 for tactical classification.",
     tools=[classify_category, check_contract, check_preferred_supplier, create_po, calculate_leakage_realtime, auto_classify_pcard],
-    model="llama-3.3-70b-versatile",
+    model="llama-3.1-8b-instant",
 )
 
 def consolidation_analysis():
