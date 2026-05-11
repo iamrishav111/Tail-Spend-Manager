@@ -62,10 +62,51 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
     ).slice(0, 10);
   }, [maverickFilterData, mavSuppliers, mavCategories, mavCostCentres]);
 
+  const scrollTo = (id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      const offset = 140; // Accounts for sticky header + tabs + nav bar
+      const bodyRect = document.body.getBoundingClientRect().top;
+      const elementRect = el.getBoundingClientRect().top;
+      const elementPosition = elementRect - bodyRect;
+      const offsetPosition = elementPosition - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const navSections = [
+    { id: 'ov-kpis', label: 'KPIs' },
+    { id: 'ov-mav-summary', label: 'Maverick Summary' },
+    { id: 'ov-mav-cat', label: 'Maverick Categories' },
+    { id: 'ov-tail-cat', label: 'Tail Categories' },
+    { id: 'ov-tail-summary', label: 'Tail Summary' },
+    { id: 'ov-explorers', label: 'Explorers' },
+    { id: 'ov-root', label: 'Root Causes' },
+  ];
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* 4 KPI TILES - Balanced 4-column grid for proper spacing */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="flex flex-col gap-6 relative">
+      {/* Sticky Table Navigation */}
+      <div className="sticky top-[124px] z-30 flex gap-2 flex-wrap bg-white/80 backdrop-blur-md border-b border-border py-2 px-1 shadow-sm mb-2 rounded-xl">
+        {navSections.map(s => (
+          <button
+            key={s.id}
+            className="btn btn-outline text-[10px] py-1 px-3 font-bold uppercase tracking-wider"
+            style={{ borderRadius: '20px', borderColor: 'var(--color-primary-border)' }}
+            onClick={() => scrollTo(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 4 KPI TILES */}
+      <div id="ov-kpis" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
         <div className="kpi-card p-5 relative group" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderLeft: '4px solid #ef4444' }}>
           <div className="text-[10px] font-bold text-danger mb-1 uppercase tracking-wider">Total Tail Spend</div>
           <div className="text-2xl font-black text-danger">{formatCurrency(dashboardData.kpis?.total_tail_spend || 0)}</div>
@@ -88,7 +129,8 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
       </div>
 
       {/* ROW 1: Maverick CC & Supplier */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="ov-mav-summary" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
         <div className="card p-0 overflow-hidden border-warning/20">
           <div className="p-3 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
             <BarChart2 size={16} className="text-warning" />
@@ -145,7 +187,8 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
       </div>
 
       {/* ROW 2: Maverick Category & Tail Category (The Drill-downs) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="ov-mav-cat" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
         <div className="card p-0 overflow-hidden border-warning/20">
           <div className="p-3 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
             <Package size={16} className="text-warning" />
@@ -199,8 +242,9 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
           </div>
         </div>
 
-        <div className="card p-0 overflow-hidden border-danger/20">
+        <div id="ov-tail-cat" className="card p-0 overflow-hidden border-danger/20">
           <div className="p-3 bg-danger/5 border-b border-danger/20 flex items-center gap-2">
+
             <Package size={16} className="text-danger" />
             <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-danger">Tail Spend by Category</h4>
           </div>
@@ -254,7 +298,8 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
       </div>
 
       {/* ROW 3: Tail Plant & Supplier */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="ov-tail-summary" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
         <div className="card p-0 overflow-hidden border-danger/20">
           <div className="p-3 bg-danger/5 border-b border-danger/20 flex items-center gap-2">
             <Factory size={16} className="text-danger" />
@@ -311,7 +356,8 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
       </div>
 
       {/* ROW 4: Explorers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div id="ov-explorers" className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+
         <div className="card p-0 overflow-hidden">
           <div className="p-4 border-b bg-surface" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex justify-between items-center mb-4">
@@ -396,7 +442,8 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
       </div>
 
       {/* ROW 5: Root Causes */}
-      <div className="card p-0 overflow-hidden mt-6">
+      <div id="ov-root" className="card p-0 overflow-hidden mt-6">
+
         <div className="p-3 bg-surface border-b flex items-center gap-2">
           <AlertOctagon size={16} className="text-danger" />
           <h4 className="mb-0 text-sm font-bold uppercase tracking-tight">Tail Root Causes</h4>

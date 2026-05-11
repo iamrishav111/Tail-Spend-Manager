@@ -65,7 +65,8 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
   return (
     <div className="flex flex-col gap-3 relative">
       {/* Floating Section Nav */}
-      <div className="sticky top-0 z-20 flex gap-2 flex-wrap bg-white border-b border-border py-2 px-1 shadow-sm">
+      <div className="sticky top-[124px] z-30 flex gap-2 flex-wrap bg-white/80 backdrop-blur-md border-b border-border py-2 px-1 shadow-sm mb-2 rounded-xl">
+
         {navSections.map(s => (
           <button
             key={s.id}

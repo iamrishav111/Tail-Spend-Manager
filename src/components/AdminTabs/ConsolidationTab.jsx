@@ -15,18 +15,32 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
 
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+  const navSections = [
+    { id: 'consolidation-kpis', label: 'KPI Overview' },
+    { id: 'supplier-consolidation', label: 'Supplier Consolidation' },
+    { id: 'contract-actions', label: 'Contract Actions' },
+    { id: 'catalog-recommendations', label: 'Catalog Recommendations' },
+    { id: 'agent-strategies', label: 'Agent Strategies' },
+  ];
+
   return (
     <div className="flex flex-col gap-6 relative">
-      {/* Floating Quick Navigation */}
-      <div className="floating-nav">
-          <button onClick={() => scrollTo('consolidation-kpis')} className="floating-nav-item" data-label="KPI Overview"></button>
-          <button onClick={() => scrollTo('supplier-consolidation')} className="floating-nav-item" data-label="Supplier Consolidation"></button>
-          <button onClick={() => scrollTo('contract-actions')} className="floating-nav-item" data-label="Contract Actions"></button>
-          <button onClick={() => scrollTo('catalog-recommendations')} className="floating-nav-item" data-label="Catalog Recommendations"></button>
-          <button onClick={() => scrollTo('agent-strategies')} className="floating-nav-item" data-label="Agent Strategies"></button>
+      {/* Sticky Table Navigation */}
+      <div className="sticky top-[124px] z-30 flex gap-2 flex-wrap bg-white/80 backdrop-blur-md border-b border-border py-2 px-1 shadow-sm mb-2 rounded-xl">
+        {navSections.map(s => (
+          <button
+            key={s.id}
+            className="btn btn-outline text-[10px] py-1 px-3 font-bold uppercase tracking-wider"
+            style={{ borderRadius: '20px', borderColor: 'var(--color-primary-border)' }}
+            onClick={() => scrollTo(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
       </div>
 
       <div id="consolidation-kpis" className="grid grid-cols-1 md:grid-cols-4 gap-6">
+
         <div className="kpi-card kpi-card-primary p-4 relative group">
           <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="Total number of tail categories analyzed for consolidation." />
           <div className="text-sm font-semibold text-primary mb-1">Categories Analyzed</div>
