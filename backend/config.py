@@ -22,7 +22,7 @@ MIN_DESCRIPTION_LENGTH = 3
 # Risk score (0-10) below which a supplier is recommended
 PREFERRED_RISK_THRESHOLD = 4.0
 # Amount in INR above which approval is required
-AUTO_APPROVAL_THRESHOLD = 10000
+AUTO_APPROVAL_THRESHOLD = 5000
 
 # Cache Configuration
 CACHE_DIR = os.path.join(os.path.dirname(__file__), '.cache')
@@ -32,11 +32,11 @@ TAIL_PERCENTILE = 0.8
 MAVERICK_VALUE_THRESHOLD = 5000
 
 # --- Root Cause Labels ---
-ROOT_CAUSE_MAVERICK = "Maverick Buy"
-ROOT_CAUSE_PCARD = "P-Card Leakage"
+ROOT_CAUSE_MAVERICK = "Sourcing Leakage"
+ROOT_CAUSE_PCARD = "Process Bypass"
 ROOT_CAUSE_EMERGENCY = "Emergency/Spot Buy"
-ROOT_CAUSE_NO_CONTRACT = "No Contract"
-ROOT_CAUSE_DEFAULT = "Fragmented Spend (Sub-P80)"
+ROOT_CAUSE_NO_CONTRACT = "Uncontracted Spend"
+ROOT_CAUSE_DEFAULT = "Uncontracted Spend"
 
 # --- Savings Leakage Logic ---
 LEAKAGE_CRITICAL_LIMIT = 1000000

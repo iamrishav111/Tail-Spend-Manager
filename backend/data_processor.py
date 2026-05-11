@@ -188,26 +188,54 @@ class DataEngine:
             
         is_pcard_petty = df['Payment Method'].isin(['P-Card', 'Petty Cash']) if 'Payment Method' in df.columns else False
         cond1 = df['Amount'] < df['P80_L2'] if ('Amount' in df.columns and 'P80_L2' in df.columns) else False
-        cond2 = df['Preferred Supplier Used'] == 'N' if 'Preferred Supplier Used' in df.columns else False
         cond3 = (df['PO Type'].isin(['spot', 'emergency']) & (df['Preferred Supplier Used'] == 'N')) if ('PO Type' in df.columns and 'Preferred Supplier Used' in df.columns) else False
         cond4 = ~df['has_contract']
         cond5 = is_pcard_petty
-        df['is_tail'] = cond1 | cond2 | cond3 | cond4 | cond5
+        df['is_tail'] = cond1 | cond3 | cond4 | cond5
         
-        mav_cond1 = ((df['PO Type'] == 'spot') & (df['Preferred Supplier Used'] == 'N')) if ('PO Type' in df.columns and 'Preferred Supplier Used' in df.columns) else False
-        mav_cond2 = (df['Payment Method'].isin(['P-Card', 'Petty Cash', 'Direct']) & (df['Amount'] > MAVERICK_VALUE_THRESHOLD)) if ('Payment Method' in df.columns and 'Amount' in df.columns) else False
-        mav_cond3 = ~df['has_contract']
-        df['is_maverick'] = mav_cond1 | mav_cond2 | mav_cond3
+        # Define Addressable Categories (Categories with at least one active contract)
+        active_contracts = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE']['Category L2'].unique()
+        df['is_addressable'] = df['Booked Category'].isin(active_contracts)
+
+        # Refined Maverick Logic: Addressable transactions that bypassed sourcing or process rules
+        mav_cond1 = (df['Preferred Supplier Used'] == 'N')  # Direct Bypass
+        mav_cond2 = (df['Payment Method'].isin(['P-Card', 'Petty Cash', 'Direct'])) # Workflow Bypass
         
+        df['is_maverick'] = df['is_addressable'] & (mav_cond1 | mav_cond2)
+        
+        # --- Global Savings Leakage Calculation (Shared across SavingsLeakage & BuyerBehaviour) ---
+        df['leakage_amt'] = 0.0
+        if not contracts_df.empty and 'is_active' in contracts_df.columns:
+            # 1. Map Best Available Price per Category
+            active_cc_best = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE'][['Category L2', 'Contracted Unit Price']].dropna(subset=['Contracted Unit Price'])
+            if not active_cc_best.empty:
+                cat_best_prices = active_cc_best.groupby('Category L2')['Contracted Unit Price'].min().to_dict()
+                df['_cat_best_price'] = df['Booked Category'].map(cat_best_prices)
+                
+                # 2. Hybrid Leakage Logic: Exact Variance (Primary) or % of Spend (Fallback)
+                mav_mask = df['is_maverick']
+                if mav_mask.any():
+                    # Exact Variance
+                    exact_mask = mav_mask & df['_cat_best_price'].notna() & (df['unit_price_paid'] > 0)
+                    df.loc[exact_mask, 'leakage_amt'] = (
+                        (df.loc[exact_mask, 'unit_price_paid'] - df.loc[exact_mask, '_cat_best_price']) * df.loc[exact_mask, 'Quantity']
+                    ).clip(lower=0)
+                    
+                    # Fallback (15% of Spend) for missing price data
+                    fallback_mask = mav_mask & ~exact_mask
+                    df.loc[fallback_mask, 'leakage_amt'] = df.loc[fallback_mask, 'Amount'] * ESTIMATED_CONTRACT_SAVINGS_PCT
+                    
+                    df['leakage_amt'] = df['leakage_amt'].fillna(0)
+
         if 'Amount' in df.columns:
             conditions = [
-                (df['Preferred Supplier Used'] == 'N') & df['has_contract'] if ('Preferred Supplier Used' in df.columns and 'has_contract' in df.columns) else False,
-                is_pcard_petty,
-                df['PO Type'].isin(['spot', 'emergency']) if 'PO Type' in df.columns else False,
-                ~df['has_contract']
+                (df['Preferred Supplier Used'] == 'N') & df['is_addressable'], # Maverick/Sourcing Leakage
+                is_pcard_petty,                                               # Process Bypass
+                df['PO Type'].isin(['spot', 'emergency'])                     # Urgent Requirement
             ]
-            choices = [ROOT_CAUSE_MAVERICK, ROOT_CAUSE_PCARD, ROOT_CAUSE_EMERGENCY, ROOT_CAUSE_NO_CONTRACT]
-            df['root_cause'] = np.select(conditions, choices, default=ROOT_CAUSE_DEFAULT)
+            choices = [ROOT_CAUSE_MAVERICK, ROOT_CAUSE_PCARD, ROOT_CAUSE_EMERGENCY]
+            # Default everything else to Uncontracted Spend (The Sourcing Opportunity)
+            df['root_cause'] = np.select(conditions, choices, default=ROOT_CAUSE_NO_CONTRACT)
         else:
             df['root_cause'] = "No Data"
         
@@ -403,12 +431,8 @@ class DataEngine:
             "potential_savings": sum(x['estimated_savings'] for x in risk_and_consolidation)
         }
 
-        maverick_bb = df[df['Preferred Supplier Used'] == 'N'].copy()
-        active_cc_bb = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE'][['Category L2', 'Contracted Unit Price']].drop_duplicates('Category L2').rename(columns={'Category L2': '_bb_cat', 'Contracted Unit Price': '_bb_price'})
-        maverick_bb = maverick_bb.merge(active_cc_bb, left_on='Booked Category', right_on='_bb_cat', how='left')
-        maverick_bb['unit_price_paid_bb'] = maverick_bb['Amount'] / maverick_bb['Quantity'].replace(0, 1)
-        maverick_bb['leakage_bb'] = ((maverick_bb['unit_price_paid_bb'] - maverick_bb['_bb_price']) * maverick_bb['Quantity']).clip(lower=0).fillna(0)
-
+        maverick_bb = df[df['is_maverick']].copy()
+        
         def bb_pattern(row):
             if row['off_contract_buys'] >= 3:
                 return 'Repeat — habitual off-contract buyer'
@@ -424,27 +448,24 @@ class DataEngine:
         buyer_agg = maverick_bb.groupby('Requester ID').agg(
             off_contract_buys=('Amount', 'count'),
             total_off_contract=('Amount', 'sum'),
-            total_leakage=('leakage_bb', 'sum'),
+            total_leakage=('leakage_amt', 'sum'),
             categories_impacted=('Booked Category', 'nunique'),
-            top_category=('Booked Category', lambda x: x.value_counts().index[0]),
-            dominant_payment=('Payment Method', lambda x: x.value_counts().index[0]),
-            dominant_po_type=('PO Type', lambda x: x.value_counts().index[0])
+            top_category=('Booked Category', lambda x: x.value_counts().index[0] if not x.empty else 'N/A'),
+            dominant_payment=('Payment Method', lambda x: x.value_counts().index[0] if not x.empty else 'N/A'),
+            dominant_po_type=('PO Type', lambda x: x.value_counts().index[0] if not x.empty else 'N/A')
         ).reset_index()
         buyer_agg['avg_leakage_per_buy'] = buyer_agg['total_leakage'] / buyer_agg['off_contract_buys']
         buyer_agg['pattern'] = buyer_agg.apply(bb_pattern, axis=1)
         buyer_agg = buyer_agg.sort_values('total_leakage', ascending=False)
 
         buyer_behavior = []
-        # Optimized: Only call AI for top 10 profiles
-        top_10_buyers = buyer_agg.head(10)
-        
         for _, row in buyer_agg.iterrows():
             bid = row['Requester ID']
             b_rows = maverick_bb[maverick_bb['Requester ID'] == bid].sort_values('Invoice Date', ascending=False)
             
             # Bucketing Logic
             off_system_txns = b_rows[b_rows['Payment Method'].isin(['P-Card', 'Direct', 'Petty Cash'])]
-            maverick_txns = b_rows[b_rows['has_contract'] & (b_rows['Preferred Supplier Used'] == 'N')]
+            maverick_txns = b_rows[b_rows['Preferred Supplier Used'] == 'N']
             
             if not off_system_txns.empty:
                 buyer_type = "Off-System"
@@ -470,7 +491,7 @@ class DataEngine:
                 "buyer_type": buyer_type,
                 "last_category": str(context_row.get('Booked Category', 'General')),
                 "last_amount": float(context_row.get('Amount', 0)),
-                "last_leakage": float(context_row.get('leakage_bb', 0)),
+                "last_leakage": float(context_row.get('leakage_amt', 0)),
                 "last_payment_method": str(context_row.get('Payment Method', 'P-Card')),
                 "last_supplier": str(context_row.get('Supplier Name Raw', 'Unknown'))
             })
@@ -563,14 +584,38 @@ class DataEngine:
         high_risk_df = df[df['Supplier ID'].isin(high_risk_sids)]
         comp_alerts = sorted(holds, key=lambda x: x['amount'], reverse=True)[:10]
 
+        # Calculate Addressable Universe Spend
+        addressable_df = df[df['is_addressable']]
+        total_addressable_spend = float(addressable_df['Amount'].sum())
+        maverick_df = df[df['is_maverick']]
+        maverick_spend_total = float(maverick_df['Amount'].sum())
+
         self.kpis_data = {
-            "total_tail_spend": total_tail_spend, "total_spend": total_spend,
-            "tail_spend_pct": total_tail_spend / total_spend if total_spend > 0 else 0,
-            "tail_supplier_count": int(tail_df['Supplier ID'].nunique()),
-            "maverick_spend": float(maverick_df['Amount'].sum()),
-            "contract_coverage_pct": categories_with_contract_count / total_categories if total_categories > 0 else 0
+            "total_tail_spend": total_tail_spend, 
+            "addressable_universe": total_addressable_spend,
+            "on_contract_spend": total_addressable_spend - maverick_spend_total,
+            "maverick_spend": maverick_spend_total,
+            "tail_supplier_count": int(tail_df['Supplier ID'].nunique())
         }
-        self.root_causes = df[df['is_tail']].groupby('root_cause').agg(total_amount=('Amount', 'sum'), transaction_count=('Invoice ID', 'count')).reset_index().sort_values('total_amount', ascending=False).to_dict(orient='records')
+        # Ensure all 4 root causes are present even if amount is 0
+        all_labels = [ROOT_CAUSE_MAVERICK, ROOT_CAUSE_PCARD, ROOT_CAUSE_EMERGENCY, ROOT_CAUSE_NO_CONTRACT]
+        
+        actual_rc = df[df['is_tail']].groupby('root_cause').agg(
+            total_amount=('Amount', 'sum'), 
+            transaction_count=('Invoice ID', 'count')
+        ).reset_index()
+        
+        rc_list = []
+        for label in all_labels:
+            match = actual_rc[actual_rc['root_cause'] == label]
+            if not match.empty:
+                rc_list.append(match.iloc[0].to_dict())
+            else:
+                rc_list.append({"root_cause": label, "total_amount": 0.0, "transaction_count": 0})
+        
+        self.root_causes = sorted(rc_list, key=lambda x: x['total_amount'], reverse=True)
+        # Hide rootcauses with 0 value
+        self.root_causes = [rc for rc in self.root_causes if rc['total_amount'] > 0]
         
         l1_summary_dict = {}
         for x in category_suppliers_extended:
@@ -592,13 +637,9 @@ class DataEngine:
         active_cats = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE']['Category L2'].unique()
         contract_gap_savings = sum(cat['tail_spend'] * ESTIMATED_CONTRACT_SAVINGS_PCT for cat in category_suppliers_extended if cat['category'] not in active_cats)
         
-        maverick_df_sl = df[df['Preferred Supplier Used'] == 'N'].copy()
-        active_cc_sl = contracts_df[contracts_df['is_active'].astype(str).str.upper() == 'TRUE'][['Category L2', 'Contracted Unit Price']].drop_duplicates('Category L2').rename(columns={'Category L2': '_sl_cat', 'Contracted Unit Price': '_sl_price'})
-        maverick_df_sl = maverick_df_sl.merge(active_cc_sl, left_on='Booked Category', right_on='_sl_cat', how='left')
-        maverick_df_sl['unit_price_paid_sl'] = maverick_df_sl['Amount'] / maverick_df_sl['Quantity'].replace(0, 1)
-        maverick_df_sl['leakage_sl'] = ((maverick_df_sl['unit_price_paid_sl'] - maverick_df_sl['_sl_price']) * maverick_df_sl['Quantity']).clip(lower=0)
-        maverick_df_sl['leakage_sl'] = maverick_df_sl['leakage_sl'].fillna(0)
-        total_maverick_leakage = float(maverick_df_sl['leakage_sl'].sum())
+        # Synchronized Maverick Identification (Addressable Universe + Bypasses)
+        maverick_df_sl = df[df['is_maverick']].copy()
+        total_maverick_leakage = float(maverick_df_sl['leakage_amt'].sum())
         off_contract_txn_count = int(len(maverick_df_sl))
 
         def maverick_root_cause(row):
@@ -611,7 +652,7 @@ class DataEngine:
             else:
                 return LEAKAGE_RC_SPOT
         maverick_df_sl['mav_root_cause'] = maverick_df_sl.apply(maverick_root_cause, axis=1)
-        rc_leakage_totals = maverick_df_sl.groupby('mav_root_cause')['leakage_sl'].sum()
+        rc_leakage_totals = maverick_df_sl.groupby('mav_root_cause')['leakage_amt'].sum()
         biggest_root_cause = rc_leakage_totals.idxmax() if not rc_leakage_totals.empty else 'N/A'
 
         def recommended_action(leakage_val, root_cause_val, category_val):
@@ -634,27 +675,59 @@ class DataEngine:
         root_cause_meanings = LEAKAGE_MEANING_MAP
 
         cat_leakage_agg = maverick_df_sl.groupby('Booked Category').agg(
-            leakage=('leakage_sl', 'sum'),
+            leakage=('leakage_amt', 'sum'),
             txn_count=('Amount', 'count'),
             total_spent=('Amount', 'sum')
-        ).reset_index().sort_values('leakage', ascending=False).head(LIVE_FEED_LIMIT)
+        ).reset_index().sort_values('leakage', ascending=False).head(10)
+        
         leakage_category_wise = []
         for _, row in cat_leakage_agg.iterrows():
+            l2_cat = str(row['Booked Category'])
+            l2_data = maverick_df_sl[maverick_df_sl['Booked Category'] == l2_cat]
+            
+            # Find dominant root cause for this category to pass to AI
+            dom_rc = l2_data['mav_root_cause'].mode().iloc[0] if not l2_data.empty else 'Spot Buy'
+            
+            # L3 Drill-down (Filter non-zero)
+            l3_col = 'Category L3' if 'Category L3' in maverick_df_sl.columns else 'Item Description'
+            l3_agg = l2_data.groupby(l3_col).agg(
+                leakage=('leakage_amt', 'sum'),
+                transactions=('Amount', 'count')
+            ).reset_index().rename(columns={l3_col: 'name'})
+            l3_agg = l3_agg[l3_agg['leakage'] > 0].sort_values('leakage', ascending=False).to_dict(orient='records')
+            
             leakage_pct = (row['leakage'] / row['total_spent'] * 100) if row['total_spent'] > 0 else 0
-            action = recommended_action(float(row['leakage']), 'Spot buy', str(row['Booked Category']))
+            action = recommended_action(float(row['leakage']), dom_rc, l2_cat)
             leakage_category_wise.append({
-                'Booked Category': str(row['Booked Category']),
+                'Booked Category': l2_cat,
                 'leakage': float(row['leakage']),
                 'txn_count': int(row['txn_count']),
                 'total_spent': float(row['total_spent']),
                 'leakage_pct': float(leakage_pct),
-                'action': action
+                'action': action,
+                'l3_breakdown': l3_agg
             })
+
+        # Off-Contract Bifurcations for Audit
+        off_contract_payment = maverick_df_sl.groupby('Payment Method').agg(
+            transactions=('Amount', 'count'),
+            leakage=('leakage_amt', 'sum')
+        ).reset_index().rename(columns={'Payment Method': 'method'}).sort_values('transactions', ascending=False).to_dict(orient='records')
+        
+        off_contract_supplier = maverick_df_sl.groupby('Supplier Name Raw').agg(
+            transactions=('Amount', 'count'),
+            leakage=('leakage_amt', 'sum')
+        ).reset_index().rename(columns={'Supplier Name Raw': 'supplier'}).sort_values('transactions', ascending=False).head(10).to_dict(orient='records')
+        
+        off_contract_plant = maverick_df_sl.groupby('plant').agg(
+            transactions=('Amount', 'count'),
+            leakage=('leakage_amt', 'sum')
+        ).reset_index().rename(columns={'plant': 'plant'}).sort_values('transactions', ascending=False).head(10).to_dict(orient='records')
 
         plant_leakage_agg = maverick_df_sl.copy()
         plant_leakage_agg['plant'] = plant_leakage_agg['Cost Centre'].str.split('-').str[0]
         plant_leakage_grouped = plant_leakage_agg.groupby('plant').agg(
-            leakage=('leakage_sl', 'sum'),
+            leakage=('leakage_amt', 'sum'),
             txn_count=('Amount', 'count')
         ).reset_index()
         plant_root = plant_leakage_agg.groupby('plant')['mav_root_cause'].agg(lambda x: x.value_counts().index[0]).reset_index().rename(columns={'mav_root_cause': 'root_cause'})
@@ -672,7 +745,7 @@ class DataEngine:
             })
 
         rc_agg = maverick_df_sl.groupby('mav_root_cause').agg(
-            leakage=('leakage_sl', 'sum'),
+            leakage=('leakage_amt', 'sum'),
             txn_count=('Amount', 'count')
         ).reset_index().sort_values('leakage', ascending=False)
         leakage_by_root_cause = []
@@ -699,7 +772,7 @@ class DataEngine:
                 'supplier_name': str(row.get('Supplier Name Raw', '')),
                 'category': str(row.get('Booked Category', '')),
                 'amount': float(row.get('Amount', 0)),
-                'leakage': float(row.get('leakage_sl', 0)),
+                'leakage': float(row.get('leakage_amt', 0)),
                 'invoice_date': row['Invoice Date'].strftime('%d-%b-%Y') if pd.notna(row.get('Invoice Date')) else ''
             })
 
@@ -715,6 +788,11 @@ class DataEngine:
             "leakage_category_wise": leakage_category_wise,
             "leakage_plant_wise": leakage_plant_wise,
             "leakage_by_root_cause": leakage_by_root_cause,
+            "off_contract_bifurcations": {
+                "payment_method": off_contract_payment,
+                "supplier": off_contract_supplier,
+                "plant": off_contract_plant
+            },
             "buyer_wise_tracker": []
         }
         self.plant_analysis = df.groupby('plant').apply(lambda x: pd.Series({"tail_spend": float(x[x['is_tail']]['Amount'].sum()), "tail_pct": min(float(x[x['is_tail']]['Amount'].sum()) / float(x['Amount'].sum()) * 100, 100) if x['Amount'].sum() > 0 else 0, "most_frequent_root_cause": x[x['is_tail']]['root_cause'].mode().iloc[0] if not x[x['is_tail']].empty else "N/A"})).reset_index().sort_values('tail_spend', ascending=False).to_dict(orient='records')
@@ -808,6 +886,88 @@ class DataEngine:
 
     # --- Endpoints ---
     def get_dashboard_kpis(self):
+        # Prepare Maverick Explorer Data
+        maverick_df = self.df_main[self.df_main['is_maverick']]
+        if not maverick_df.empty:
+            # Full Explorer Data
+            mav_group = maverick_df.groupby(['Supplier ID', 'Booked Category', 'Cost Centre']).agg(
+                maverick_spend=('Amount', 'sum')
+            ).reset_index().sort_values('maverick_spend', ascending=False).head(200)
+            mav_group = mav_group.rename(columns={'Booked Category': 'category', 'Cost Centre': 'cost_centre', 'Supplier ID': 'supplier_id'})
+            self.maverick_filter_data = mav_group.to_dict(orient='records')
+
+            # Summary: Maverick by Cost Centre
+            self.maverick_by_cc = maverick_df.groupby('Cost Centre').agg(
+                amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+            ).reset_index().rename(columns={'Cost Centre': 'cost_centre'}).sort_values('amount', ascending=False).head(10).to_dict(orient='records')
+
+            # Summary: Maverick by Supplier
+            self.maverick_by_supplier = maverick_df.groupby('Supplier Name Raw').agg(
+                amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+            ).reset_index().rename(columns={'Supplier Name Raw': 'supplier_name'}).sort_values('amount', ascending=False).head(10).to_dict(orient='records')
+
+            # Summary: Maverick by Category with L3 Breakdown
+            mav_cat_agg = maverick_df.groupby('Booked Category').agg(
+                amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+            ).reset_index().rename(columns={'Booked Category': 'category'}).sort_values('amount', ascending=False).head(10)
+            
+            self.maverick_by_category = []
+            l3_col = 'Category L3' if 'Category L3' in maverick_df.columns else 'Item Description'
+            for _, row in mav_cat_agg.iterrows():
+                l2_cat = row['category']
+                l3_data = maverick_df[maverick_df['Booked Category'] == l2_cat]
+                l3_breakdown = l3_data.groupby(l3_col).agg(
+                    amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+                ).reset_index().rename(columns={l3_col: 'name'}).sort_values('amount', ascending=False).to_dict(orient='records')
+                
+                self.maverick_by_category.append({
+                    "category": l2_cat,
+                    "amount": float(row['amount']),
+                    "transactions": int(row['transactions']),
+                    "l3_breakdown": l3_breakdown
+                })
+        else:
+            self.maverick_filter_data = []
+            self.maverick_by_cc = []
+            self.maverick_by_supplier = []
+            self.maverick_by_category = []
+
+        # Additional Tail Summaries
+        tail_df = self.df_main[self.df_main['is_tail']]
+        if not tail_df.empty:
+            self.tail_by_supplier = tail_df.groupby('Supplier Name Raw').agg(
+                amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+            ).reset_index().rename(columns={'Supplier Name Raw': 'supplier_name'}).sort_values('amount', ascending=False).head(10).to_dict(orient='records')
+            
+            self.tail_by_plant = tail_df.groupby('Cost Centre').agg(
+                amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+            ).reset_index().rename(columns={'Cost Centre': 'cost_centre'}).sort_values('amount', ascending=False).head(10).to_dict(orient='records')
+            
+            # Summary: Tail by Category with L3 Breakdown
+            tail_cat_agg = tail_df.groupby('Booked Category').agg(
+                amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+            ).reset_index().rename(columns={'Booked Category': 'category'}).sort_values('amount', ascending=False).head(10)
+            
+            self.tail_by_category = []
+            l3_col_tail = 'Category L3' if 'Category L3' in tail_df.columns else 'Item Description'
+            for _, row in tail_cat_agg.iterrows():
+                l2_cat = row['category']
+                l3_data = tail_df[tail_df['Booked Category'] == l2_cat]
+                l3_breakdown = l3_data.groupby(l3_col_tail).agg(
+                    amount=('Amount', 'sum'), transactions=('Invoice ID', 'count')
+                ).reset_index().rename(columns={l3_col_tail: 'name'}).sort_values('amount', ascending=False).to_dict(orient='records')
+                
+                self.tail_by_category.append({
+                    "category": l2_cat,
+                    "amount": float(row['amount']),
+                    "transactions": int(row['transactions']),
+                    "l3_breakdown": l3_breakdown
+                })
+        else:
+            self.tail_by_supplier = []
+            self.tail_by_plant = []
+            self.tail_by_category = []
+
         return {
             "kpis": self.kpis_data,
             "root_causes": self.root_causes,
@@ -815,7 +975,14 @@ class DataEngine:
             "plant_analysis": self.plant_analysis,
             "top_spends_category": self.top_spends_category,
             "tail_cost_centre_data": getattr(self, 'tail_cost_centre_data', []),
-            "tail_filter_data": getattr(self, 'tail_filter_data', [])
+            "tail_filter_data": getattr(self, 'tail_filter_data', []),
+            "maverick_filter_data": getattr(self, 'maverick_filter_data', []),
+            "maverick_by_cc": getattr(self, 'maverick_by_cc', []),
+            "maverick_by_supplier": getattr(self, 'maverick_by_supplier', []),
+            "maverick_by_category": getattr(self, 'maverick_by_category', []),
+            "tail_by_supplier": getattr(self, 'tail_by_supplier', []),
+            "tail_by_plant": getattr(self, 'tail_by_plant', []),
+            "tail_by_category": getattr(self, 'tail_by_category', [])
         }
         
     def get_savings_leakage(self):
@@ -877,6 +1044,32 @@ class DataEngine:
         
     def get_compliance(self):
         return {"compliance": self.compliance_obj}
+
+    def get_negotiation_context(self, category):
+        """Builds the context packet for the AI Negotiation Helper based on Category Benchmarks."""
+        df = self.df_main
+        contracts = self.contracts_df_raw
+        
+        # 1. Historical Data (Category Wide Spend & Volume)
+        cat_df = df[df['Booked Category'] == category]
+        category_volume = float(cat_df['Quantity'].sum()) if not cat_df.empty else 0
+        category_avg_price = float(cat_df['unit_price_paid'].mean()) if not cat_df.empty and cat_df['unit_price_paid'].mean() > 0 else 0
+        
+        # 2. Competitor Benchmark (Lowest Contracted Price for this Category across ANY supplier)
+        active_contracts = contracts[(contracts['Category L2'] == category) & (contracts['is_active'].astype(str).str.upper() == 'TRUE')]
+        
+        competitor_price = 0
+        if not active_contracts.empty and 'Contracted Unit Price' in active_contracts.columns:
+            active_contracts['Contracted Unit Price'] = pd.to_numeric(active_contracts['Contracted Unit Price'], errors='coerce')
+            competitor_price = float(active_contracts['Contracted Unit Price'].min())
+            if pd.isna(competitor_price): competitor_price = 0
+            
+        return {
+            "category": category,
+            "category_avg_price": category_avg_price,
+            "category_annual_volume": category_volume,
+            "competitor_lowest_price": competitor_price
+        }
 
     def get_contract_decisions(self):
         df = self.df_main.copy()
@@ -1451,15 +1644,18 @@ class DataEngine:
             "seasonal_items": dp[dp['is_seasonal'] == True].replace({np.nan: None}).to_dict('records')
         }
     def refresh_logic(self):
-        """Triggered via API to pick up config.py changes instantly."""
+        """Triggered via API to pull live data from Google Sheets and recalculate logic."""
         try:
             import config
             import importlib
             importlib.reload(config)
             
-            # Re-run logic
+            # Pull Live Data first
+            self._fetch_data()
+            
+            # Then Re-run logic
             self._process_data_logic(skip_training=True)
-            return {"status": "success", "message": "Logic recalculated in <1s"}
+            return {"status": "success", "message": "Live data fetched and logic recalculated."}
         except Exception as e:
-            logger.error(f"Refresh failed: {e}")
+            print(f"Refresh failed: {e}")
             return {"status": "error", "message": str(e)}

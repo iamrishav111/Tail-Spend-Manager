@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from data_processor import DataEngine
 from contextlib import asynccontextmanager
+import PyPDF2
+import io
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -96,6 +98,45 @@ def get_purchase_history():
 @app.post("/api/admin/refresh-logic")
 def refresh_logic():
     return engine.refresh_logic()
+
+class NegotiationRequest(BaseModel):
+    category: str
+    rfq_context: str = ""
+    history: list
+
+@app.post("/api/negotiation/chat")
+def negotiation_chat(req: NegotiationRequest):
+    context = engine.get_negotiation_context(req.category)
+    context['rfq_context'] = req.rfq_context
+    response = engine.ai_agent.chat_negotiation(context, req.history)
+    return {"status": "success", "data": {"reply": response}}
+
+@app.get("/api/negotiation/meta")
+def negotiation_meta():
+    suppliers = engine.df_main['Supplier Name Raw'].dropna().unique().tolist()
+    categories = engine.df_main['Booked Category'].dropna().unique().tolist()
+    return {"status": "success", "data": {"suppliers": sorted(suppliers), "categories": sorted(categories)}}
+
+@app.post("/api/negotiation/parse-document")
+async def parse_document(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        extracted_text = ""
+        
+        if file.filename.lower().endswith('.pdf'):
+            try:
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+                for page in pdf_reader.pages:
+                    extracted_text += page.extract_text() + "\n"
+            except Exception as e:
+                return {"status": "error", "message": f"Failed to parse PDF: {str(e)}"}
+        else:
+            # Assume text based
+            extracted_text = content.decode('utf-8', errors='ignore')
+            
+        return {"status": "success", "data": {"text": extracted_text.strip()}}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

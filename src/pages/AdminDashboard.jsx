@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LogOut, TrendingUp, AlertOctagon, Package, DollarSign, UserCheck, LayoutGrid, Loader, ShieldAlert } from 'lucide-react';
+import { LogOut, TrendingUp, AlertOctagon, Package, DollarSign, UserCheck, LayoutGrid, Loader, ShieldAlert, MessageSquare } from 'lucide-react';
 
 import OverviewTab from '../components/AdminTabs/OverviewTab';
 import SavingsLeakageTab from '../components/AdminTabs/SavingsLeakageTab';
@@ -11,6 +11,7 @@ import DemandForecastTab from '../components/AdminTabs/DemandForecastTab';
 import BuyerBehaviourTab from '../components/AdminTabs/BuyerBehaviourTab';
 import CatalogueTab from '../components/AdminTabs/CatalogueTab';
 import PurchaseHistoryTab from '../components/AdminTabs/PurchaseHistoryTab';
+import NegotiationTab from '../components/AdminTabs/NegotiationTab';
 // ADMIN DASHBOARD MAIN COMPONENT
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,8 @@ const AdminDashboard = () => {
     { name: 'Demand Forecast', slug: 'demand-forecast', endpoint: '/api/dashboard/demand-forecast', icon: <TrendingUp size={16} /> },
     { name: 'Buyer Behaviour', slug: 'buyer-behavior', endpoint: '/api/dashboard/buyer-behavior', icon: <UserCheck size={16} /> },
     { name: 'Catalogue', slug: 'catalog', endpoint: '/api/dashboard/catalog', icon: <LayoutGrid size={16} /> },
-    { name: 'Purchase History', slug: 'purchase-history', endpoint: '/api/purchase-history', icon: <Package size={16} /> }
+    { name: 'Purchase History', slug: 'purchase-history', endpoint: '/api/purchase-history', icon: <Package size={16} /> },
+    { name: 'Negotiation AI', slug: 'negotiation', endpoint: '/api/negotiation/meta', icon: <MessageSquare size={16} /> }
   ];
 
   const { tab: tabSlug } = useParams();
@@ -163,6 +165,9 @@ const AdminDashboard = () => {
 
       case 'Purchase History':
         return <PurchaseHistoryTab formatCurrency={formatCurrency} />;
+
+      case 'Negotiation AI':
+        return <NegotiationTab data={dashboardData} />;
 
       default:
         return <div>Select a tab</div>;

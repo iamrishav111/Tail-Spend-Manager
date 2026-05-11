@@ -32,11 +32,102 @@ class TailSpendAIAgent:
             chat_completion = self.client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.model_name,
+                temperature=0.2,
+                max_tokens=1024,
             )
             return chat_completion.choices[0].message.content.strip()
         except Exception as e:
             logger.error(f"Groq API Error: {e}")
             return None
+
+    def _fetch_web_trends(self, category):
+        """Uses ddgs to fetch live market trends for the category."""
+        try:
+            from duckduckgo_search import DDGS
+            results = DDGS().text(f"{category} procurement market pricing trends 2026", max_results=3)
+            return "\n".join([f"- {r.get('title', '')}: {r.get('body', '')}" for r in results]) if results else "No recent data found."
+        except Exception as e:
+            logger.error(f"Web Search Error: {e}")
+            return "Market data unavailable."
+
+    def chat_negotiation(self, context, history):
+        """Handles back-and-forth negotiation chat with RAG context injection."""
+        if not self.enabled:
+            return "AI Agent is offline."
+
+        is_first_turn = len(history) <= 1
+
+        # 1. System Prompt
+        base_persona = (
+            "You are an expert, highly strategic procurement negotiator and Chief Category Manager. "
+            "Act as a co-pilot for the buyer. Your goal is to secure the absolute best Total Value. "
+            "Do NOT roleplay as the supplier. "
+        )
+
+        if is_first_turn:
+            system_prompt = base_persona + (
+                "You are analyzing the supplier's FIRST quote. You must provide a highly detailed, multi-dimensional analysis.\n\n"
+                "MANDATORY OUTPUT STRUCTURE:\n"
+                "1. Detailed Parameter Evaluation: Break down exactly 5-6 parameters (e.g., Unit Price, MOQ, Lead Time, Payment Terms, SLA). "
+                "DO NOT just say 'Unacceptable'. Instead, use the Internal Data (Competitor Price, Annual Volume) to build a realistic, data-driven argument "
+                "(e.g., 'Their price of X is higher than our benchmark of Y. Since we buy Z volume annually, we have the leverage to demand a match').\n"
+                "2. Strategic Leverage: A brief explanation of our power dynamics based on internal data and web market trends.\n"
+                "3. Target Counter-Offer: The exact numeric targets we should demand.\n"
+                "4. Email Script: A professional, firm, ready-to-send email draft implementing this strategy. Actively mention our data (like volume or competitor rates) "
+                "in the email to corner the supplier into giving us better rates."
+            )
+        else:
+            system_prompt = base_persona + (
+                "You are now in the MIDDLE of an ongoing negotiation. The supplier has just responded to your counter-offer. "
+                "DO NOT output the massive 4-part structure from the first round. Be highly dynamic and conversational.\n\n"
+                "MANDATORY OUTPUT STRUCTURE:\n"
+                "1. Quick Assessment: Briefly acknowledge what the supplier conceded and what they are still holding back on.\n"
+                "2. Next Move: Give the buyer concise, strategic advice on how hard to push next, using the Internal Data (Volume, Competitor Price) as ammo.\n"
+                "3. Email Script: Provide the next email draft. Be firm but professional. If they are stuck on price, use our total volume or competitor alternative to nudge them."
+            )
+
+        # 2. Context Injection
+        rfq_info = f"- Buyer's Original RFQ Details:\n{context.get('rfq_context')}\n" if context.get('rfq_context') else ""
+        web_trends = self._fetch_web_trends(context.get('category'))
+        
+        context_msg = (
+            f"INTERNAL DATA & LEVERAGE:\n"
+            f"- Negotiating Category: {context.get('category')}\n"
+            f"{rfq_info}"
+            f"- Internal Category Average Price: ₹{context.get('category_avg_price')}\n"
+            f"- Competitor's Lowest Contract Price in Category: ₹{context.get('competitor_lowest_price')}\n"
+            f"- Our Total Annual Volume in Category: {context.get('category_annual_volume')} units\n\n"
+            f"LIVE EXTERNAL MARKET TRENDS (Web Search Results):\n"
+            f"{web_trends}\n\n"
+            "PRIORITIZATION HIERARCHY & REALISTIC NUDGING:\n"
+            "1. Price vs Competitors: If our Category Average or Competitor Price is lower, forcefully (but professionally) challenge their quote in the email by referencing the alternative market rate.\n"
+            "2. Volume Tiering: Use the 'Total Annual Volume' specifically in the email to entice them into a volume discount.\n"
+            "3. Status Quo: Reject unjustified price increases.\n"
+            "4. Terms/SLA: Aggressively negotiate Net-60 payment terms."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": context_msg},
+            {"role": "assistant", "content": "Understood. I will use the internal volume and competitor data dynamically to build realistic, persuasive negotiation arguments."}
+        ]
+
+        # 3. Append User Chat History
+        for msg in history:
+            messages.append({"role": msg.get("role", "user"), "content": msg.get("content", "")})
+
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=messages,
+                model=self.model_name,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            return chat_completion.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"Groq API Error in Negotiation Chat: {e}")
+            return "Sorry, I encountered an error generating the negotiation strategy."
+
 
     def get_recurring_advice(self, item_sku, freq, qty, plants):
         """

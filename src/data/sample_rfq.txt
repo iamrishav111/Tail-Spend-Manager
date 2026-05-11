@@ -1,0 +1,23 @@
+REQUEST FOR QUOTATION (RFQ)
+Reference Number: RFQ-2026-IT-044
+Date Issued: May 11, 2026
+
+1. ITEM SPECIFICATIONS
+Category: IT Hardware (Laptops)
+Quantity Required (MOQ base): 500 units
+Minimum Specifications Required:
+- Processor: Intel Core i7 (13th Gen) or AMD Ryzen 7 equivalent
+- RAM: 16 GB DDR5
+- Storage: 512 GB NVMe SSD
+
+2. COMMERCIAL & DELIVERY PARAMETERS
+The supplier's quotation must explicitly address the following parameters:
+- Unit Price (Targeted under ₹65,000 per unit)
+- Volume/Tier Discounts (if we increase order to 1,000 units within 6 months)
+- Lead Time: Delivery must be completed within 3 weeks (21 days) of PO issuance.
+- Incoterms: DDP (Delivered Duty Paid) to our primary facility in Pune. Freight must be included in the unit price.
+
+3. TERMS & COMPLIANCE
+- Payment Terms: Net-60 days from the date of invoice. No advance payments.
+- Warranty & Support: Minimum 3-year Next Business Day (NBD) On-Site warranty.
+- Penalty Clause: A 1% penalty on the PO value will be levied per week of delayed delivery, up to a maximum of 5%.

@@ -1,108 +1,50 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { TrendingUp, AlertOctagon, Package, Users, AlertTriangle, Zap, BarChart2, Activity, Search, Filter, UserCheck, Mail, ChevronLeft, ChevronRight, Loader, Info, Check, ChevronDown } from 'lucide-react';
-
-// Custom Multi-Select Dropdown Component
-const MultiSelectDropdown = ({ label, options, selectedValues, onChange, placeholder }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const toggleOption = (option) => {
-    if (selectedValues.includes(option)) {
-      onChange(selectedValues.filter(v => v !== option));
-    } else {
-      onChange([...selectedValues, option]);
-    }
-  };
-
-  const isAllSelected = selectedValues.length === 0;
-
-  return (
-    <div className="flex flex-col gap-1 relative" ref={dropdownRef}>
-      <label className="text-xs font-semibold text-secondary">{label}</label>
-      <div 
-        className="input input-bordered input-sm flex items-center justify-between cursor-pointer bg-white overflow-hidden"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <span className="truncate text-xs pr-4">
-          {isAllSelected ? 'ALL' : `${selectedValues.length} Selected`}
-        </span>
-        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </div>
-
-      {isOpen && (
-        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-border rounded-md shadow-xl z-50 max-h-60 overflow-y-auto">
-          <div 
-            className={`flex items-center gap-2 p-2 hover:bg-primary-light cursor-pointer text-xs ${isAllSelected ? 'bg-primary-light font-bold' : ''}`}
-            onClick={() => { onChange([]); setIsOpen(false); }}
-          >
-            <div className={`w-4 h-4 border rounded flex items-center justify-center ${isAllSelected ? 'bg-primary border-primary' : 'border-border'}`}>
-              {isAllSelected && <Check size={10} className="text-white" />}
-            </div>
-            ALL
-          </div>
-          {options.map(option => {
-            const isSelected = selectedValues.includes(option);
-            return (
-              <div 
-                key={option}
-                className={`flex items-center gap-2 p-2 hover:bg-primary-light cursor-pointer text-xs ${isSelected ? 'bg-primary-light font-bold' : ''}`}
-                onClick={(e) => { e.stopPropagation(); toggleOption(option); }}
-              >
-                <div className={`w-4 h-4 border rounded flex items-center justify-center ${isSelected ? 'bg-primary border-primary' : 'border-border'}`}>
-                  {isSelected && <Check size={10} className="text-white" />}
-                </div>
-                {option}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
+import React, { useState, useMemo } from 'react';
+import { 
+  BarChart2, 
+  Check, 
+  AlertTriangle, 
+  AlertOctagon, 
+  Users, 
+  Info,
+  Package,
+  ArrowRight,
+  Factory,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
+import MultiSelectDropdown from '../Common/MultiSelectDropdown';
 
 const OverviewTab = ({ dashboardData, formatCurrency }) => {
-  const TABLE_PAGE_SIZE = 10;
-  const CATEGORY_PAGE_SIZE = 5;
+  const [expandedL2s, setExpandedL2s] = useState(new Set());
 
-  const [categoryPage, setCategoryPage] = useState(1);
-  
-  const [plantSearch, setPlantSearch] = useState('');
-  const [plantSortCol, setPlantSortCol] = useState('tail_spend');
-  const [plantSortDesc, setPlantSortDesc] = useState(true);
-  const [plantPage, setPlantPage] = useState(1);
+  const toggleL2 = (cat) => {
+    const newExpanded = new Set(expandedL2s);
+    if (newExpanded.has(cat)) {
+      newExpanded.delete(cat);
+    } else {
+      newExpanded.add(cat);
+    }
+    setExpandedL2s(newExpanded);
+  };
 
-  const [spendSearch, setSpendSearch] = useState('');
-  const [spendSortCol, setSpendSortCol] = useState('amount');
-  const [spendSortDesc, setSpendSortDesc] = useState(true);
-  const [spendPage, setSpendPage] = useState(1);
-
-  // Tail Suppliers Cost Centre state
-  const [ccSearch, setCcSearch] = useState('');
-  const [ccPage, setCcPage] = useState(1);
-
-  // Filterable tail table state - Now using arrays for multi-select
   const [filterSuppliers, setFilterSuppliers] = useState([]);
   const [filterCategories, setFilterCategories] = useState([]);
   const [filterCostCentres, setFilterCostCentres] = useState([]);
 
-  const tailFilterData = dashboardData.tail_filter_data || [];
-  const tailCostCentreData = dashboardData.tail_cost_centre_data || [];
+  const [mavSuppliers, setMavSuppliers] = useState([]);
+  const [mavCategories, setMavCategories] = useState([]);
+  const [mavCostCentres, setMavCostCentres] = useState([]);
 
-  // Derive unique dropdown options from raw data
+  const tailFilterData = dashboardData.tail_filter_data || [];
+  const maverickFilterData = dashboardData.maverick_filter_data || [];
+
   const supplierOptions = useMemo(() => Array.from(new Set(tailFilterData.map(r => r.supplier_id))).sort(), [tailFilterData]);
   const categoryOptions = useMemo(() => Array.from(new Set(tailFilterData.map(r => r.category))).sort(), [tailFilterData]);
   const costCentreOptions = useMemo(() => Array.from(new Set(tailFilterData.map(r => r.cost_centre))).sort(), [tailFilterData]);
+
+  const mavSupplierOptions = useMemo(() => Array.from(new Set(maverickFilterData.map(r => r.supplier_id))).sort(), [maverickFilterData]);
+  const mavCategoryOptions = useMemo(() => Array.from(new Set(maverickFilterData.map(r => r.category))).sort(), [maverickFilterData]);
+  const mavCostCentreOptions = useMemo(() => Array.from(new Set(maverickFilterData.map(r => r.cost_centre))).sort(), [maverickFilterData]);
 
   const filteredTailRows = useMemo(() => {
     return tailFilterData.filter(r =>
@@ -112,374 +54,377 @@ const OverviewTab = ({ dashboardData, formatCurrency }) => {
     ).slice(0, 10);
   }, [tailFilterData, filterSuppliers, filterCategories, filterCostCentres]);
 
-  // Cost Centre search + pagination
-  const filteredCC = useMemo(() =>
-    tailCostCentreData.filter(r => r.cost_centre?.toLowerCase().includes(ccSearch.toLowerCase())),
-    [tailCostCentreData, ccSearch]
-  );
-  const ccTotalPages = Math.max(1, Math.ceil(filteredCC.length / TABLE_PAGE_SIZE));
-  const ccCurrentP = Math.min(ccPage, ccTotalPages);
-  const paginatedCC = filteredCC.slice((ccCurrentP - 1) * TABLE_PAGE_SIZE, ccCurrentP * TABLE_PAGE_SIZE);
+  const filteredMavRows = useMemo(() => {
+    return maverickFilterData.filter(r =>
+      (mavSuppliers.length === 0 || mavSuppliers.includes(r.supplier_id)) &&
+      (mavCategories.length === 0 || mavCategories.includes(r.category)) &&
+      (mavCostCentres.length === 0 || mavCostCentres.includes(r.cost_centre))
+    ).slice(0, 10);
+  }, [maverickFilterData, mavSuppliers, mavCategories, mavCostCentres]);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="kpi-card kpi-card-danger p-4 relative group">
-          <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="Total annual spend classified as 'Tail Spend' (low value, high volume)." />
-          <div className="text-sm font-semibold text-danger mb-1 flex justify-between items-center">
-            <span>Total Tail Spend</span>
-            <AlertOctagon size={16} />
-          </div>
-          <div className="text-2xl font-bold">{formatCurrency(dashboardData.kpis?.total_tail_spend || 0)}</div>
+      {/* 4 KPI TILES - Balanced 4-column grid for proper spacing */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="kpi-card p-5 relative group" style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderLeft: '4px solid #ef4444' }}>
+          <div className="text-[10px] font-bold text-danger mb-1 uppercase tracking-wider">Total Tail Spend</div>
+          <div className="text-2xl font-black text-danger">{formatCurrency(dashboardData.kpis?.total_tail_spend || 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-warning p-4 relative group">
-          <Info size={14} className="absolute top-2 right-2 text-warning opacity-30 group-hover:opacity-100 transition-opacity" title="Total spend made outside of preferred/contracted supplier agreements." />
-          <div className="text-sm font-semibold text-warning mb-1 flex justify-between items-center">
-            <span>Maverick Spend</span>
-            <AlertTriangle size={16} />
-          </div>
-          <div className="text-2xl font-bold">{formatCurrency(dashboardData.kpis?.maverick_spend || 0)}</div>
+
+        <div className="kpi-card p-5 relative group" style={{ background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', borderLeft: '4px solid #f59e0b' }}>
+          <div className="text-[10px] font-bold text-warning mb-1 uppercase tracking-wider">Maverick Spend</div>
+          <div className="text-2xl font-black text-warning">{formatCurrency(dashboardData.kpis?.maverick_spend || 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-primary p-4 relative group">
-          <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="Percentage of categories that have at least one active supplier contract." />
-          <div className="text-sm font-semibold text-primary mb-1 flex justify-between items-center">
-            <span>Contract Coverage</span>
-            <Package size={16} />
-          </div>
-          <div className="text-2xl font-bold">{((dashboardData.kpis?.contract_coverage_pct || 0) * 100).toFixed(0)}%</div>
+
+        <div className="kpi-card p-5 relative group" style={{ background: 'rgba(34, 197, 94, 0.05)', border: '1px solid rgba(34, 197, 94, 0.2)', borderLeft: '4px solid #22c55e' }}>
+          <div className="text-[10px] font-bold text-success mb-1 uppercase tracking-wider">On-Contract Spend</div>
+          <div className="text-2xl font-black text-success">{formatCurrency(dashboardData.kpis?.on_contract_spend || 0)}</div>
         </div>
-        <div className="kpi-card kpi-card-success p-4 relative group">
-          <Info size={14} className="absolute top-2 right-2 text-success opacity-30 group-hover:opacity-100 transition-opacity" title="Total count of unique suppliers contributing to tail spend." />
-          <div className="text-sm font-semibold text-success mb-1 flex justify-between items-center">
-            <span>Tail Suppliers</span>
-            <Users size={16} />
-          </div>
-          <div className="text-2xl font-bold">{dashboardData.kpis?.tail_supplier_count || 0}</div>
+
+        <div className="kpi-card p-5 relative group" style={{ background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)', borderLeft: '4px solid #6366f1' }}>
+          <div className="text-[10px] font-bold text-secondary mb-1 uppercase tracking-wider">Tail Suppliers</div>
+          <div className="text-2xl font-black text-secondary">{dashboardData.kpis?.tail_supplier_count || 0}</div>
         </div>
       </div>
 
+      {/* ROW 1: Maverick CC & Supplier */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card p-0 overflow-hidden">
-          <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
-            <h3 className="mb-0">Top Tail Spend Root Causes</h3>
+        <div className="card p-0 overflow-hidden border-warning/20">
+          <div className="p-3 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
+            <BarChart2 size={16} className="text-warning" />
+            <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-warning">Maverick by Cost Centre</h4>
           </div>
           <div className="table-container border-none" style={{ borderRadius: 0 }}>
             <table>
               <thead>
                 <tr>
-                  <th>Root Cause</th>
-                  <th className="numeric">Amount</th>
-                  <th className="numeric">Txns</th>
+                  <th className="text-[10px] uppercase">Cost Centre</th>
+                  <th className="numeric text-[10px] uppercase">Amount</th>
+                  <th className="numeric text-[10px] uppercase">Txns</th>
                 </tr>
               </thead>
               <tbody>
-                {(dashboardData.root_causes || []).map((item, i) => (
-                    <tr key={i}>
-                      <td className="font-semibold">{item.root_cause}</td>
-                      <td className="numeric font-bold">{formatCurrency(item.total_amount)}</td>
-                      <td className="numeric text-secondary">{item.transaction_count}</td>
-                    </tr>
+                {(dashboardData.maverick_by_cc || []).map((row, i) => (
+                  <tr key={i}>
+                    <td className="text-xs font-semibold">{row.cost_centre}</td>
+                    <td className="numeric text-xs font-bold">{formatCurrency(row.amount)}</td>
+                    <td className="numeric text-xs text-secondary">{row.transactions}</td>
+                  </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </div>
-        <div className="card p-0 overflow-hidden">
-          <div className="p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
-            <h3 className="mb-0">Category-wise Tail Spend</h3>
+
+        <div className="card p-0 overflow-hidden border-warning/20">
+          <div className="p-3 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
+            <Users size={16} className="text-warning" />
+            <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-warning">Maverick by Supplier</h4>
           </div>
           <div className="table-container border-none" style={{ borderRadius: 0 }}>
             <table>
               <thead>
                 <tr>
-                  <th>Category</th>
-                  <th className="numeric">Tail Spend</th>
-                  <th style={{ width: '40%' }}>% of Category</th>
+                  <th className="text-[10px] uppercase">Supplier Name</th>
+                  <th className="numeric text-[10px] uppercase">Amount</th>
+                  <th className="numeric text-[10px] uppercase">Txns</th>
                 </tr>
               </thead>
               <tbody>
-                {(dashboardData.category_analysis || []).slice((categoryPage - 1) * CATEGORY_PAGE_SIZE, categoryPage * CATEGORY_PAGE_SIZE).map((item, i) => {
-                  const pct = (item.tail_pct * 100).toFixed(1);
+                {(dashboardData.maverick_by_supplier || []).map((row, i) => (
+                  <tr key={i}>
+                    <td className="text-xs font-semibold truncate max-w-[120px]">{row.supplier_name}</td>
+                    <td className="numeric text-xs font-bold">{formatCurrency(row.amount)}</td>
+                    <td className="numeric text-xs text-secondary">{row.transactions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ROW 2: Maverick Category & Tail Category (The Drill-downs) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card p-0 overflow-hidden border-warning/20">
+          <div className="p-3 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
+            <Package size={16} className="text-warning" />
+            <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-warning">Maverick by Category</h4>
+          </div>
+          <div className="table-container border-none" style={{ borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase w-8"></th>
+                  <th className="text-[10px] uppercase">Category</th>
+                  <th className="numeric text-[10px] uppercase">Amount</th>
+                  <th className="numeric text-[10px] uppercase">Txns</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dashboardData.maverick_by_category || []).map((row, i) => {
+                  const isExpanded = expandedL2s.has('mav_' + row.category);
                   return (
-                    <tr key={i}>
-                      <td className="font-semibold">{item.category}</td>
-                      <td className="numeric font-bold">{formatCurrency(item.tail_spend)}</td>
-                      <td>
-                        <div className="flex items-center gap-3">
-                          <progress className="progress progress-primary w-full" value={pct} max="100"></progress>
-                          <span className="text-xs font-bold w-12 text-right">{pct}%</span>
-                        </div>
-                      </td>
-                    </tr>
+                    <React.Fragment key={i}>
+                      <tr className="cursor-pointer hover:bg-warning/5 transition-colors" onClick={() => toggleL2('mav_' + row.category)}>
+                        <td>{isExpanded ? <ChevronDown size={14} className="text-warning" /> : <ChevronRight size={14} className="text-secondary" />}</td>
+                        <td className="text-xs font-semibold">{row.category}</td>
+                        <td className="numeric text-xs font-bold">{formatCurrency(row.amount)}</td>
+                        <td className="numeric text-xs text-secondary">{row.transactions}</td>
+                      </tr>
+                      {isExpanded && row.l3_breakdown && (
+                        <tr className="bg-gray-50/50">
+                          <td colSpan={4} className="p-0 border-none">
+                            <div className="pl-8 pr-3 py-2 border-l-2 border-warning/20 ml-4 mb-2">
+                              <table className="w-full border-none">
+                                <tbody className="border-none">
+                                  {row.l3_breakdown.map((l3, j) => (
+                                    <tr key={j} className="border-none bg-transparent h-auto">
+                                      <td className="text-[10px] font-medium text-secondary py-1 border-none">{l3.name}</td>
+                                      <td className="numeric text-[10px] font-bold text-warning py-1 border-none">{formatCurrency(l3.amount)}</td>
+                                      <td className="numeric text-[10px] text-secondary/70 py-1 border-none">{l3.transactions}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
-          {dashboardData.category_analysis.length > CATEGORY_PAGE_SIZE && (
-              <div className="p-4 border-t flex justify-between items-center bg-surface">
-                  <button 
-                      className="btn btn-outline text-xs py-1" 
-                      disabled={categoryPage === 1}
-                      onClick={() => setCategoryPage(p => p - 1)}
-                  >Previous</button>
-                  <span className="text-xs font-bold text-secondary">Page {categoryPage} of {Math.ceil(dashboardData.category_analysis.length / CATEGORY_PAGE_SIZE)}</span>
-                  <button 
-                      className="btn btn-outline text-xs py-1" 
-                      disabled={categoryPage === Math.ceil(dashboardData.category_analysis.length / CATEGORY_PAGE_SIZE)}
-                      onClick={() => setCategoryPage(p => p + 1)}
-                  >Next</button>
-              </div>
-          )}
+        </div>
+
+        <div className="card p-0 overflow-hidden border-danger/20">
+          <div className="p-3 bg-danger/5 border-b border-danger/20 flex items-center gap-2">
+            <Package size={16} className="text-danger" />
+            <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-danger">Tail Spend by Category</h4>
+          </div>
+          <div className="table-container border-none" style={{ borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase w-8"></th>
+                  <th className="text-[10px] uppercase">Category</th>
+                  <th className="numeric text-[10px] uppercase">Amount</th>
+                  <th className="numeric text-[10px] uppercase">Txns</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dashboardData.tail_by_category || []).map((row, i) => {
+                  const isExpanded = expandedL2s.has('tail_' + row.category);
+                  return (
+                    <React.Fragment key={i}>
+                      <tr className="cursor-pointer hover:bg-danger/5 transition-colors" onClick={() => toggleL2('tail_' + row.category)}>
+                        <td>{isExpanded ? <ChevronDown size={14} className="text-danger" /> : <ChevronRight size={14} className="text-secondary" />}</td>
+                        <td className="text-xs font-semibold">{row.category}</td>
+                        <td className="numeric text-xs font-bold">{formatCurrency(row.amount)}</td>
+                        <td className="numeric text-xs text-secondary">{row.transactions}</td>
+                      </tr>
+                      {isExpanded && row.l3_breakdown && (
+                        <tr className="bg-gray-50/50">
+                          <td colSpan={4} className="p-0 border-none">
+                            <div className="pl-8 pr-3 py-2 border-l-2 border-danger/20 ml-4 mb-2">
+                              <table className="w-full border-none">
+                                <tbody className="border-none">
+                                  {row.l3_breakdown.map((l3, j) => (
+                                    <tr key={j} className="border-none bg-transparent h-auto">
+                                      <td className="text-[10px] font-medium text-secondary py-1 border-none">{l3.name}</td>
+                                      <td className="numeric text-[10px] font-bold text-danger py-1 border-none">{formatCurrency(l3.amount)}</td>
+                                      <td className="numeric text-[10px] text-secondary/70 py-1 border-none">{l3.transactions}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
+      {/* ROW 3: Tail Plant & Supplier */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card p-0 overflow-hidden border-danger/20">
+          <div className="p-3 bg-danger/5 border-b border-danger/20 flex items-center gap-2">
+            <Factory size={16} className="text-danger" />
+            <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-danger">Tail Spend by Plant</h4>
+          </div>
+          <div className="table-container border-none" style={{ borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase">Plant/CC</th>
+                  <th className="numeric text-[10px] uppercase">Amount</th>
+                  <th className="numeric text-[10px] uppercase">Txns</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dashboardData.tail_by_plant || []).map((row, i) => (
+                  <tr key={i}>
+                    <td className="text-xs font-semibold">{row.cost_centre}</td>
+                    <td className="numeric text-xs font-bold">{formatCurrency(row.amount)}</td>
+                    <td className="numeric text-xs text-secondary">{row.transactions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="card p-0 overflow-hidden border-danger/20">
+          <div className="p-3 bg-danger/5 border-b border-danger/20 flex items-center gap-2">
+            <Users size={16} className="text-danger" />
+            <h4 className="mb-0 text-sm font-bold uppercase tracking-tight text-danger">Tail Spend by Supplier</h4>
+          </div>
+          <div className="table-container border-none" style={{ borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase">Supplier Name</th>
+                  <th className="numeric text-[10px] uppercase">Amount</th>
+                  <th className="numeric text-[10px] uppercase">Txns</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(dashboardData.tail_by_supplier || []).map((row, i) => (
+                  <tr key={i}>
+                    <td className="text-xs font-semibold truncate max-w-[120px]">{row.supplier_name}</td>
+                    <td className="numeric text-xs font-bold">{formatCurrency(row.amount)}</td>
+                    <td className="numeric text-xs text-secondary">{row.transactions}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ROW 4: Explorers */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          <div className="card p-0 overflow-hidden">
-              <div className="p-4 border-b flex justify-between items-center bg-surface" style={{ borderColor: 'var(--color-border)' }}>
-                  <h3 className="mb-0">Tail Spend by Plant</h3>
-                  <input 
-                      type="text" 
-                      placeholder="Search plants..." 
-                      className="input input-bordered input-sm" 
-                      value={plantSearch} 
-                      onChange={e => setPlantSearch(e.target.value)}
-                  />
-              </div>
-              <div className="table-container border-none" style={{ borderRadius: 0 }}>
-              <table>
-                  <thead>
-                  <tr>
-                      <th className="cursor-pointer" onClick={() => { setPlantSortCol('plant'); setPlantSortDesc(plantSortCol === 'plant' ? !plantSortDesc : false); }}>Cost Centre {plantSortCol === 'plant' ? (plantSortDesc ? '▼' : '▲') : ''}</th>
-                      <th className="numeric cursor-pointer" onClick={() => { setPlantSortCol('tail_spend'); setPlantSortDesc(plantSortCol === 'tail_spend' ? !plantSortDesc : true); }}>Tail Spend {plantSortCol === 'tail_spend' ? (plantSortDesc ? '▼' : '▲') : ''}</th>
-                  </tr>
-                  </thead>
-                  <tbody>
-                  {(() => {
-                      const filtered = dashboardData.plant_analysis
-                          .filter(item => item.plant.toLowerCase().includes(plantSearch.toLowerCase()))
-                          .sort((a, b) => {
-                              let valA = a[plantSortCol]; let valB = b[plantSortCol];
-                              if (typeof valA === 'string') valA = valA.toLowerCase();
-                              if (typeof valB === 'string') valB = valB.toLowerCase();
-                              if (valA < valB) return plantSortDesc ? 1 : -1;
-                              if (valA > valB) return plantSortDesc ? -1 : 1;
-                              return 0;
-                          });
-                      
-                      const maxPages = Math.ceil(filtered.length / TABLE_PAGE_SIZE) || 1;
-                      const currentP = Math.min(plantPage, maxPages);
-                      const paginated = filtered.slice((currentP - 1) * TABLE_PAGE_SIZE, currentP * TABLE_PAGE_SIZE);
-                      
-                      return paginated.map((item, i) => (
-                          <tr key={i}>
-                          <td className="font-semibold">{item.plant}</td>
-                          <td className="numeric font-bold text-primary">{formatCurrency(item.tail_spend)}</td>
-                          </tr>
-                      ));
-                  })()}
-                  </tbody>
-              </table>
-              </div>
-              {(() => {
-                  const filteredCount = dashboardData.plant_analysis.filter(item => item.plant.toLowerCase().includes(plantSearch.toLowerCase())).length;
-                  const maxPages = Math.ceil(filteredCount / TABLE_PAGE_SIZE) || 1;
-                  if (maxPages <= 1) return null;
-                  return (
-                      <div className="p-4 border-t flex justify-between items-center bg-surface">
-                          <button 
-                              className="btn btn-outline text-xs py-1" 
-                              disabled={plantPage <= 1}
-                              onClick={() => setPlantPage(p => Math.max(1, p - 1))}
-                          >Previous</button>
-                          <span className="text-xs font-bold text-secondary">Page {Math.min(plantPage, maxPages)} of {maxPages}</span>
-                          <button 
-                              className="btn btn-outline text-xs py-1" 
-                              disabled={plantPage >= maxPages}
-                              onClick={() => setPlantPage(p => Math.min(maxPages, p + 1))}
-                          >Next</button>
-                      </div>
-                  );
-              })()}
+        <div className="card p-0 overflow-hidden">
+          <div className="p-4 border-b bg-surface" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="mb-0 flex items-center gap-2">
+                <AlertTriangle size={18} className="text-warning" />
+                Maverick Spend Explorer
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <MultiSelectDropdown label="Supplier ID" options={mavSupplierOptions} selectedValues={mavSuppliers} onChange={setMavSuppliers} />
+              <MultiSelectDropdown label="Category" options={mavCategoryOptions} selectedValues={mavCategories} onChange={setMavCategories} />
+              <MultiSelectDropdown label="Cost Centre" options={mavCostCentreOptions} selectedValues={mavCostCentres} onChange={setMavCostCentres} />
+            </div>
           </div>
+          <div className="table-container border-none" style={{ borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase">Supplier ID</th>
+                  <th className="text-[10px] uppercase">Category</th>
+                  <th className="text-[10px] uppercase">Cost Centre</th>
+                  <th className="numeric text-[10px] uppercase">Maverick Spend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMavRows.length === 0
+                  ? <tr><td colSpan={4} className="text-center text-secondary py-4 text-xs">No violations found.</td></tr>
+                  : filteredMavRows.map((row, i) => (
+                    <tr key={i}>
+                      <td className="font-bold text-xs text-primary">{row.supplier_id}</td>
+                      <td className="font-semibold text-xs">{row.category}</td>
+                      <td className="text-secondary text-xs">{row.cost_centre}</td>
+                      <td className="numeric font-bold text-warning text-xs">{formatCurrency(row.maverick_spend)}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-          <div className="card p-0 overflow-hidden">
-              <div className="p-4 border-b flex justify-between items-center bg-surface" style={{ borderColor: 'var(--color-border)' }}>
-                  <h3 className="mb-0">Top Spends Overall</h3>
-                  <input 
-                      type="text" 
-                      placeholder="Search categories..." 
-                      className="input input-bordered input-sm" 
-                      value={spendSearch} 
-                      onChange={e => setSpendSearch(e.target.value)}
-                  />
-              </div>
-              <div className="table-container border-none" style={{ borderRadius: 0 }}>
-              <table>
-                  <thead>
-                  <tr>
-                      <th className="cursor-pointer" onClick={() => { setSpendSortCol('category'); setSpendSortDesc(spendSortCol === 'category' ? !spendSortDesc : false); }}>Category {spendSortCol === 'category' ? (spendSortDesc ? '▼' : '▲') : ''}</th>
-                      <th className="numeric cursor-pointer" onClick={() => { setSpendSortCol('amount'); setSpendSortDesc(spendSortCol === 'amount' ? !spendSortDesc : true); }}>Total Spend {spendSortCol === 'amount' ? (spendSortDesc ? '▼' : '▲') : ''}</th>
-                  </tr>
-                  </thead>
-                  <tbody>
-                  {(() => {
-                      const filtered = dashboardData.top_spends_category
-                          .filter(item => item.category.toLowerCase().includes(spendSearch.toLowerCase()))
-                          .sort((a, b) => {
-                              let valA = a[spendSortCol]; let valB = b[spendSortCol];
-                              if (typeof valA === 'string') valA = valA.toLowerCase();
-                              if (typeof valB === 'string') valB = valB.toLowerCase();
-                              if (valA < valB) return spendSortDesc ? 1 : -1;
-                              if (valA > valB) return spendSortDesc ? -1 : 1;
-                              return 0;
-                          });
-                      
-                      const maxPages = Math.ceil(filtered.length / TABLE_PAGE_SIZE) || 1;
-                      const currentP = Math.min(spendPage, maxPages);
-                      const paginated = filtered.slice((currentP - 1) * TABLE_PAGE_SIZE, currentP * TABLE_PAGE_SIZE);
-                      
-                      return paginated.map((item, i) => (
-                          <tr key={i}>
-                          <td className="font-semibold">{item.category}</td>
-                          <td className="numeric font-bold text-primary">{formatCurrency(item.amount)}</td>
-                          </tr>
-                      ));
-                  })()}
-                  </tbody>
-              </table>
-              </div>
-              {(() => {
-                  const filteredCount = dashboardData.top_spends_category.filter(item => item.category.toLowerCase().includes(spendSearch.toLowerCase())).length;
-                  const maxPages = Math.ceil(filteredCount / TABLE_PAGE_SIZE) || 1;
-                  if (maxPages <= 1) return null;
-                  return (
-                      <div className="p-4 border-t flex justify-between items-center bg-surface">
-                          <button 
-                              className="btn btn-outline text-xs py-1" 
-                              disabled={spendPage <= 1}
-                              onClick={() => setSpendPage(p => Math.max(1, p - 1))}
-                          >Previous</button>
-                          <span className="text-xs font-bold text-secondary">Page {Math.min(spendPage, maxPages)} of {maxPages}</span>
-                          <button 
-                              className="btn btn-outline text-xs py-1" 
-                              disabled={spendPage >= maxPages}
-                              onClick={() => setSpendPage(p => Math.min(maxPages, p + 1))}
-                          >Next</button>
-                      </div>
-                  );
-              })()}
+        <div className="card p-0 overflow-hidden">
+          <div className="p-4 border-b bg-surface" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="mb-0 flex items-center gap-2">
+                <AlertOctagon size={18} className="text-danger" />
+                Tail Spend Explorer
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <MultiSelectDropdown label="Supplier ID" options={supplierOptions} selectedValues={filterSuppliers} onChange={setFilterSuppliers} />
+              <MultiSelectDropdown label="Category" options={categoryOptions} selectedValues={filterCategories} onChange={setFilterCategories} />
+              <MultiSelectDropdown label="Cost Centre" options={costCentreOptions} selectedValues={filterCostCentres} onChange={setFilterCostCentres} />
+            </div>
           </div>
+          <div className="table-container border-none" style={{ borderRadius: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th className="text-[10px] uppercase">Supplier ID</th>
+                  <th className="text-[10px] uppercase">Category</th>
+                  <th className="text-[10px] uppercase">Cost Centre</th>
+                  <th className="numeric text-[10px] uppercase">Tail Spend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTailRows.length === 0
+                  ? <tr><td colSpan={4} className="text-center text-secondary py-4 text-xs">No items found.</td></tr>
+                  : filteredTailRows.map((row, i) => (
+                    <tr key={i}>
+                      <td className="font-bold text-xs text-primary">{row.supplier_id}</td>
+                      <td className="font-semibold text-xs">{row.category}</td>
+                      <td className="text-secondary text-xs">{row.cost_centre}</td>
+                      <td className="numeric font-bold text-danger text-xs">{formatCurrency(row.tail_spend)}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      {/* NEW: Tail Suppliers by Cost Centre */}
-      <div className="card p-0 overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center bg-surface" style={{ borderColor: 'var(--color-border)' }}>
-          <h3 className="mb-0">Tail Suppliers — Cost Centre Wise</h3>
-          <input
-            type="text"
-            placeholder="Search cost centre..."
-            className="input input-bordered input-sm"
-            value={ccSearch}
-            onChange={e => { setCcSearch(e.target.value); setCcPage(1); }}
-          />
+      {/* ROW 5: Root Causes */}
+      <div className="card p-0 overflow-hidden mt-6">
+        <div className="p-3 bg-surface border-b flex items-center gap-2">
+          <AlertOctagon size={16} className="text-danger" />
+          <h4 className="mb-0 text-sm font-bold uppercase tracking-tight">Tail Root Causes</h4>
         </div>
         <div className="table-container border-none" style={{ borderRadius: 0 }}>
           <table>
             <thead>
               <tr>
-                <th>Cost Centre</th>
-                <th className="numeric">Tail Spend</th>
-                <th className="numeric">Unique Suppliers</th>
-                <th className="numeric">Transactions</th>
+                <th className="text-[10px] uppercase">Root Cause</th>
+                <th className="numeric text-[10px] uppercase">Amount</th>
+                <th className="numeric text-[10px] uppercase">Txns</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedCC.length === 0
-                ? <tr><td colSpan={4} className="text-center text-secondary py-4 text-sm">No data available.</td></tr>
-                : paginatedCC.map((row, i) => (
-                  <tr key={i}>
-                    <td className="font-semibold">{row.cost_centre}</td>
-                    <td className="numeric font-bold text-danger">{formatCurrency(row.tail_spend)}</td>
-                    <td className="numeric text-secondary">{row.supplier_count}</td>
-                    <td className="numeric text-secondary">{row.txn_count}</td>
-                  </tr>
-                ))
-              }
+              {(dashboardData.root_causes || []).map((row, i) => (
+                <tr key={i}>
+                  <td className="text-xs font-semibold">{row.root_cause}</td>
+                  <td className="numeric text-xs font-bold">{formatCurrency(row.total_amount)}</td>
+                  <td className="numeric text-xs text-secondary">{row.transaction_count}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        {ccTotalPages > 1 && (
-          <div className="p-4 border-t flex justify-between items-center bg-surface">
-            <button className="btn btn-outline text-xs py-1" disabled={ccCurrentP <= 1} onClick={() => setCcPage(p => Math.max(1, p - 1))}>Previous</button>
-            <span className="text-xs font-bold text-secondary">Page {ccCurrentP} of {ccTotalPages}</span>
-            <button className="btn btn-outline text-xs py-1" disabled={ccCurrentP >= ccTotalPages} onClick={() => setCcPage(p => Math.min(ccTotalPages, p + 1))}>Next</button>
-          </div>
-        )}
-      </div>
-
-      {/* NEW: Filterable Tail Spend Explorer */}
-      <div className="card p-0 overflow-hidden">
-        <div className="p-4 border-b bg-surface" style={{ borderColor: 'var(--color-border)' }}>
-          <h3 className="mb-3">Tail Spend Explorer</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <MultiSelectDropdown 
-              label="Supplier ID"
-              options={supplierOptions}
-              selectedValues={filterSuppliers}
-              onChange={setFilterSuppliers}
-            />
-            <MultiSelectDropdown 
-              label="Category"
-              options={categoryOptions}
-              selectedValues={filterCategories}
-              onChange={setFilterCategories}
-            />
-            <MultiSelectDropdown 
-              label="Cost Centre"
-              options={costCentreOptions}
-              selectedValues={filterCostCentres}
-              onChange={setFilterCostCentres}
-            />
-          </div>
-        </div>
-        <div className="table-container border-none" style={{ borderRadius: 0 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Supplier ID</th>
-                <th>Category</th>
-                <th>Cost Centre</th>
-                <th className="numeric">Tail Spend</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTailRows.length === 0
-                ? <tr><td colSpan={4} className="text-center text-secondary py-4 text-sm">No matching records. Try changing the filters.</td></tr>
-                : filteredTailRows.map((row, i) => (
-                  <tr key={i}>
-                    <td className="font-bold text-xs text-primary">{row.supplier_id}</td>
-                    <td className="font-semibold text-sm">{row.category}</td>
-                    <td className="text-secondary text-sm">{row.cost_centre}</td>
-                    <td className="numeric font-bold text-danger">{formatCurrency(row.tail_spend)}</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </div>
-        {(filterSuppliers.length > 0 || filterCategories.length > 0 || filterCostCentres.length > 0) && (
-          <div className="p-3 border-t bg-surface flex justify-between items-center">
-            <span className="text-xs text-secondary">Showing up to 10 rows for selected filters.</span>
-            <button
-              className="btn btn-outline text-xs py-1"
-              onClick={() => { setFilterSuppliers([]); setFilterCategories([]); setFilterCostCentres([]); }}
-            >Clear Filters</button>
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
 export default OverviewTab;
+

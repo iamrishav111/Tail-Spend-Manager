@@ -517,3 +517,36 @@ html {
   /* When it sticks, maybe add more shadow or different background */
   box-shadow: var(--shadow-md);
 }
+
+/* Markdown Styling for Negotiation AI */
+.prose {
+  color: var(--color-text);
+  line-height: 1.6;
+}
+.prose p {
+  margin-bottom: 0.75rem;
+}
+.prose strong {
+  font-weight: 700;
+  color: var(--color-text);
+}
+.prose h1, .prose h2, .prose h3 {
+  color: var(--color-primary);
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+}
+.prose h1 { font-size: 1.25rem; }
+.prose h2 { font-size: 1.1rem; }
+.prose h3 { font-size: 1rem; }
+.prose ul, .prose ol {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+.prose li {
+  margin-bottom: 0.25rem;
+}
+.prose li p {
+  margin-bottom: 0;
+}

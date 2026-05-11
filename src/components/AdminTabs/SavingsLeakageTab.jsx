@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
-import { Activity, Info } from 'lucide-react';
+import { Activity, Info, ChevronDown, ChevronRight } from 'lucide-react';
 
 const SavingsLeakageTab = ({ data, formatCurrency }) => {
   const sle = data.savings_leakage_extended || {};
+  const [expandedL2, setExpandedL2] = useState({});
   const [catPage, setCatPage] = useState(1);
   const [plantPage, setPlantPage] = useState(1);
   const PAGE_SIZE = 5;
 
-  // Live feed sort state — default: date desc, then leakage desc
-  const [liveSort, setLiveSort] = useState('date');
-  const [liveSortDesc, setLiveSortDesc] = useState(true);
-
   const catItems = sle.leakage_category_wise || [];
   const plantItems = sle.leakage_plant_wise || [];
   const rootCauseItems = sle.leakage_by_root_cause || [];
-  // Filter out leakage=0 from live feed, then sort
+
+  const toggleL2 = (cat) => {
+    setExpandedL2(prev => ({ ...prev, [cat]: !prev[cat] }));
+  };
+
+  const [liveSort, setLiveSort] = useState('date');
+  const [liveSortDesc, setLiveSortDesc] = useState(true);
+
   const rawLiveItems = (sle.live_alert_feed || []).filter(f => f.leakage > 0);
   const liveItems = [...rawLiveItems].sort((a, b) => {
     let valA, valB;
@@ -24,7 +28,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
     } else if (liveSort === 'leakage') {
       valA = a.leakage || 0;
       valB = b.leakage || 0;
-    } else { // amount
+    } else {
       valA = a.amount || 0;
       valB = b.amount || 0;
     }
@@ -44,6 +48,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
     if (action.startsWith('MEDIUM')) return 'text-primary font-semibold';
     return 'text-secondary';
   };
+
   const catTotalPages = Math.max(1, Math.ceil(catItems.length / PAGE_SIZE));
   const plantTotalPages = Math.max(1, Math.ceil(plantItems.length / PAGE_SIZE));
 
@@ -73,7 +78,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         ))}
       </div>
 
-      {/* KPI Tiles */}
+      {/* KPI Tiles - Restored Colors */}
       <div id="sl-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
         <div className="kpi-card kpi-card-danger p-3 relative group">
           <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="Total spend that exceeded contracted rates in the last 90 days." />
@@ -98,7 +103,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         </div>
       </div>
 
-      {/* Live Alert Feed */}
+      {/* Live Alert Feed - Restored to Top */}
       <div id="sl-live" className="card p-0 overflow-hidden border-t-4" style={{ borderTopColor: '#ef4444' }}>
         <div className="p-3 border-b bg-danger-bg flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -131,8 +136,8 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                   <td className="font-bold text-xs text-primary">{item.invoice_id}</td>
                   <td className="text-xs text-secondary">{item.invoice_date}</td>
                   <td className="font-semibold text-xs">{item.requester_id}</td>
-                  <td className="text-xs font-medium" style={{ maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.supplier_name}</td>
-                  <td className="text-xs font-medium" style={{ maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.category}</td>
+                  <td className="text-xs font-medium truncate max-w-[140px]">{item.supplier_name}</td>
+                  <td className="text-xs font-medium truncate max-w-[120px]">{item.category}</td>
                   <td className="numeric text-xs font-semibold">{formatCurrency(item.amount)}</td>
                   <td className="numeric font-bold text-danger">{formatCurrency(item.leakage)}</td>
                 </tr>
@@ -143,36 +148,56 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         </div>
       </div>
 
-      {/* Category Leakage */}
+      {/* Category Leakage with Restored Table Look + Dropdown */}
       <div id="sl-cat" className="card p-0 overflow-hidden">
         <div className="p-3 border-b bg-surface"><h3 className="mb-0 text-sm font-bold">Leakage by Category (Top 10)</h3></div>
-        <div className="table-container border-none" style={{ borderRadius: 0, maxHeight: '280px', overflowY: 'auto' }}>
+        <div className="table-container border-none" style={{ borderRadius: 0 }}>
           <table>
-            <thead style={{ position: 'sticky', top: 0 }}>
+            <thead>
               <tr>
+                <th className="w-8"></th>
                 <th>Category</th>
                 <th className="numeric">Leakage</th>
                 <th className="numeric">Txns</th>
                 <th className="numeric">Total Spent</th>
                 <th className="numeric">Leakage %</th>
-                <th>Action</th>
+                <th>Action Strategy (AI)</th>
               </tr>
             </thead>
             <tbody>
-              {catItems.slice((catPage - 1) * PAGE_SIZE, catPage * PAGE_SIZE).map((item, i) => (
-                <tr key={i}>
-                  <td className="font-semibold text-sm">{item['Booked Category']}</td>
-                  <td className="numeric font-bold text-danger">{formatCurrency(item.leakage)}</td>
-                  <td className="numeric text-xs">{item.txn_count}</td>
-                  <td className="numeric text-secondary text-xs">{formatCurrency(item.total_spent)}</td>
-                  <td className="numeric">
-                    <span className={`font-bold text-xs ${item.leakage_pct > 30 ? 'text-danger' : item.leakage_pct > 15 ? 'text-warning' : 'text-success'}`}>
-                      {item.leakage_pct?.toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className={`text-xs ${severityClass(item.action)}`} style={{ maxWidth: '180px' }}>{item.action}</td>
-                </tr>
-              ))}
+              {catItems.slice((catPage - 1) * PAGE_SIZE, catPage * PAGE_SIZE).map((item, i) => {
+                const isExpanded = expandedL2[item['Booked Category']];
+                return (
+                  <React.Fragment key={i}>
+                    <tr>
+                      <td>
+                        <button onClick={() => toggleL2(item['Booked Category'])}>
+                          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      </td>
+                      <td className="font-semibold text-sm">{item['Booked Category']}</td>
+                      <td className="numeric font-bold text-danger">{formatCurrency(item.leakage)}</td>
+                      <td className="numeric text-xs">{item.txn_count}</td>
+                      <td className="numeric text-secondary text-xs">{formatCurrency(item.total_spent)}</td>
+                      <td className="numeric">
+                        <span className={`font-bold text-xs ${item.leakage_pct > 30 ? 'text-danger' : item.leakage_pct > 15 ? 'text-warning' : 'text-success'}`}>
+                          {item.leakage_pct?.toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className={`text-xs ${severityClass(item.action)}`} style={{ maxWidth: '180px' }}>{item.action}</td>
+                    </tr>
+                    {isExpanded && (item.l3_breakdown || []).map((l3, j) => (
+                      <tr key={`l3-${i}-${j}`} className="bg-surface/30">
+                        <td></td>
+                        <td className="pl-6 text-xs text-secondary font-medium">↳ {l3.name}</td>
+                        <td className="numeric text-xs font-bold text-danger/70">{formatCurrency(l3.leakage)}</td>
+                        <td className="numeric text-[10px] text-secondary">{l3.transactions} txns</td>
+                        <td colSpan={3}></td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -185,17 +210,17 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         )}
       </div>
 
-      {/* Root Cause Table */}
+      {/* Root Cause Analysis Table */}
       <div id="sl-root" className="card p-0 overflow-hidden">
         <div className="p-3 border-b bg-surface"><h3 className="mb-0 text-sm font-bold">Leakage by Root Cause</h3></div>
-        <div className="table-container border-none" style={{ borderRadius: 0, maxHeight: '240px', overflowY: 'auto' }}>
+        <div className="table-container border-none" style={{ borderRadius: 0 }}>
           <table>
-            <thead style={{ position: 'sticky', top: 0 }}>
+            <thead>
               <tr>
                 <th>Root Cause</th>
                 <th className="numeric">Leakage ₹</th>
                 <th className="numeric">% of Total</th>
-                <th>What It Means</th>
+                <th>Definition</th>
                 <th>Recommended Fix</th>
               </tr>
             </thead>
@@ -204,17 +229,11 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                 <tr key={i}>
                   <td className="font-bold text-sm">{item.root_cause}</td>
                   <td className="numeric font-bold text-danger">{formatCurrency(item.leakage)}</td>
-                  <td className="numeric">
-                    <div className="flex items-center gap-1">
-                      <div style={{ width: `${Math.min(Math.round(item.leakage_pct), 80)}px`, height: '5px', background: '#ef4444', borderRadius: '3px', flexShrink: 0 }} />
-                      <span className="font-bold text-xs">{item.leakage_pct?.toFixed(1)}%</span>
-                    </div>
-                  </td>
+                  <td className="numeric font-bold text-xs">{item.leakage_pct?.toFixed(1)}%</td>
                   <td className="text-xs text-secondary font-medium" style={{ maxWidth: '170px' }}>{item.meaning}</td>
                   <td className="text-xs text-primary font-semibold" style={{ maxWidth: '190px' }}>{item.recommended_fix}</td>
                 </tr>
               ))}
-              {rootCauseItems.length === 0 && <tr><td colSpan={5} className="text-center text-secondary py-4">No data.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -223,9 +242,9 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
       {/* Plant-wise Leakage */}
       <div id="sl-plant" className="card p-0 overflow-hidden">
         <div className="p-3 border-b bg-surface"><h3 className="mb-0 text-sm font-bold">Plant Wise Leakage (Top 10)</h3></div>
-        <div className="table-container border-none" style={{ borderRadius: 0, maxHeight: '260px', overflowY: 'auto' }}>
+        <div className="table-container border-none" style={{ borderRadius: 0 }}>
           <table>
-            <thead style={{ position: 'sticky', top: 0 }}>
+            <thead>
               <tr>
                 <th>Plant</th>
                 <th className="numeric">Leakage ₹</th>
