@@ -8,9 +8,14 @@ load_dotenv()
 SHEET_ID = os.getenv("SHEET_ID", "")
 # --- AI Configuration ---
 ENABLE_AI_ADVICE = True    # Master toggle for AI
-AI_PROVIDER = "groq"       # Options: "gemini", "groq"
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+ENABLE_LEAKAGE_AI = os.getenv("ENABLE_LEAKAGE_AI", "True").lower() == "true"
+ENABLE_DEMAND_AI = os.getenv("ENABLE_DEMAND_AI", "True").lower() == "true"
+AI_PROVIDER = os.getenv("AI_PROVIDER", "groq")
+GROQ_API_KEYS_RAW = os.getenv("GROQ_API_KEYS", "")
+GROQ_API_KEYS = [k.strip() for k in GROQ_API_KEYS_RAW.split(",") if k.strip()]
+# Backward compatibility for single key
+if not GROQ_API_KEYS and os.getenv("GROQ_API_KEY"):
+    GROQ_API_KEYS = [os.getenv("GROQ_API_KEY")]
 
 # AI & Classification Thresholds
 # Minimum score (0-1) for AI prediction

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:backend": "python backend/main.py",
+    "dev:backend": "py backend/main.py",
     "dev:all": "npm run dev & npm run dev:backend",
     "build": "vite build",
     "lint": "eslint .",

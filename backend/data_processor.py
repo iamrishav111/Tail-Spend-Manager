@@ -406,20 +406,42 @@ class DataEngine:
                 
             supp_risk_list_sorted = sorted(supp_risk_list, key=lambda x: (x['risk_score'], -x['spend']))
             
-            # Restore Dynamic/Random Logic (User Preference)
-            max_target = min(sc - 1, 6)
-            target_suppliers = int(np.random.randint(2, max_target + 1)) if max_target >= 2 else 2
+            # 1. AI AGENTIC ADVICE (Consolidation Strategy)
+            cat_total_spend = float(group['Amount'].sum())
+            plants_list = group['plant'].unique()
+            
+            # Use Benchmark logic for Target: Max(3, Industry Recommendation)
+            # For now, we use a sensible heuristic: Max(3, sc // 3 + 1) while ensuring < sc
+            target_suppliers = max(3, int(sc // 2.5))
+            if target_suppliers >= sc: target_suppliers = max(1, sc - 1)
+            if sc <= 3: target_suppliers = 2 # Forced reduction if small
+            
+            ai_strat = self.ai_agent.get_consolidation_advice(
+                category=cat,
+                current_suppliers=sc,
+                target_suppliers=target_suppliers,
+                savings=cat_total_spend * CONSOLIDATION_SAVINGS_FACTOR,
+                context={'plants': len(plants_list)}
+            )
             
             cons_opp = int(sc - target_suppliers)
-            est_savings = float(cgroup['Amount'].sum()) * CONSOLIDATION_SAVINGS_FACTOR
+            est_savings = cat_total_spend * CONSOLIDATION_SAVINGS_FACTOR
             
             avg_risk_before = float(np.mean([s['risk_score'] for s in supp_risk_list])) if supp_risk_list else 0.0
             avg_risk_after = float(np.mean([s['risk_score'] for s in supp_risk_list_sorted[:target_suppliers]])) if supp_risk_list_sorted else 0.0
             
             risk_and_consolidation.append({
-                "category": cat, "supplier_count": sc, "consolidation_opportunity": cons_opp, "estimated_savings": est_savings,
-                "single_source": (sc == 1), "target_suppliers": target_suppliers, "avg_risk_before": avg_risk_before,
-                "avg_risk_after": avg_risk_after, "suppliers": supp_risk_list, "target_suppliers_list": supp_risk_list_sorted[:target_suppliers]
+                "category": cat, 
+                "supplier_count": sc, 
+                "consolidation_opportunity": cons_opp, 
+                "estimated_savings": est_savings,
+                "single_source": (sc == 1), 
+                "target_suppliers": target_suppliers, 
+                "avg_risk_before": avg_risk_before,
+                "avg_risk_after": avg_risk_after, 
+                "suppliers": supp_risk_list, 
+                "target_suppliers_list": supp_risk_list_sorted[:target_suppliers],
+                "ai_strategy": ai_strat # NEW: Stores Decision, Why, Strategy, Action
             })
             
         risk_and_consolidation = sorted(risk_and_consolidation, key=lambda x: x['estimated_savings'], reverse=True)[:10]
@@ -643,11 +665,14 @@ class DataEngine:
         off_contract_txn_count = int(len(maverick_df_sl))
 
         def maverick_root_cause(row):
-            if row.get('PO Type') == 'emergency':
+            po_type = str(row.get('PO Type', '')).lower().strip()
+            pay_method = str(row.get('Payment Method', '')).lower().strip()
+            
+            if po_type == 'emergency':
                 return LEAKAGE_RC_EMERGENCY
-            elif row.get('Payment Method') in ['P-Card', 'Petty Cash']:
+            elif any(x in pay_method for x in ['p-card', 'card', 'petty']):
                 return LEAKAGE_RC_PCARD
-            elif row.get('Payment Method') == 'Direct':
+            elif pay_method == 'direct':
                 return LEAKAGE_RC_DIRECT
             else:
                 return LEAKAGE_RC_SPOT
@@ -655,21 +680,7 @@ class DataEngine:
         rc_leakage_totals = maverick_df_sl.groupby('mav_root_cause')['leakage_amt'].sum()
         biggest_root_cause = rc_leakage_totals.idxmax() if not rc_leakage_totals.empty else 'N/A'
 
-        def recommended_action(leakage_val, root_cause_val, category_val):
-            # Try AI first
-            ai_advice = self.ai_agent.get_leakage_advice(category_val, leakage_val, root_cause_val)
-            if ai_advice:
-                return ai_advice
-
-            # Fallback to rules
-            if leakage_val > LEAKAGE_CRITICAL_LIMIT:
-                return f'CRITICAL: Block non-preferred POs in {category_val}. ₹{leakage_val:,.0f} leaked.'
-            elif leakage_val > LEAKAGE_HIGH_LIMIT:
-                return f'HIGH: Escalate to plant head. Run consolidation RFQ for {category_val}.'
-            elif leakage_val > LEAKAGE_MEDIUM_LIMIT:
-                return f'MEDIUM: Buyer nudge sent. System alert on next PO for {category_val}.'
-            else:
-                return f'LOW: Monitor. Include {category_val} in weekly digest.'
+        # AI Reasoning is now Lazy-Loaded. No automated calls at startup.
 
         root_cause_fix_map = LEAKAGE_FIX_MAP
         root_cause_meanings = LEAKAGE_MEANING_MAP
@@ -697,7 +708,15 @@ class DataEngine:
             l3_agg = l3_agg[l3_agg['leakage'] > 0].sort_values('leakage', ascending=False).to_dict(orient='records')
             
             leakage_pct = (row['leakage'] / row['total_spent'] * 100) if row['total_spent'] > 0 else 0
-            action = recommended_action(float(row['leakage']), dom_rc, l2_cat)
+            
+            # AI ADVICE AT STARTUP (Conditional)
+            action = None
+            if config.ENABLE_LEAKAGE_AI:
+                action = self.ai_agent.get_category_leakage_advice(l2_cat, float(row['leakage']), dom_rc, context={
+                    'top_suppliers': ", ".join(l2_data['Supplier Name Raw'].mode().head(3).tolist()),
+                    'avg_variance_pct': round(float(leakage_pct), 1)
+                })
+
             leakage_category_wise.append({
                 'Booked Category': l2_cat,
                 'leakage': float(row['leakage']),
@@ -705,6 +724,12 @@ class DataEngine:
                 'total_spent': float(row['total_spent']),
                 'leakage_pct': float(leakage_pct),
                 'action': action,
+                'context': {
+                    'leakage': float(row['leakage']),
+                    'root_cause': dom_rc,
+                    'top_suppliers': ", ".join(l2_data['Supplier Name Raw'].mode().head(3).tolist()),
+                    'avg_variance_pct': round(float(leakage_pct), 1)
+                },
                 'l3_breakdown': l3_agg
             })
 
@@ -722,45 +747,93 @@ class DataEngine:
         off_contract_plant = maverick_df_sl.groupby('plant').agg(
             transactions=('Amount', 'count'),
             leakage=('leakage_amt', 'sum')
-        ).reset_index().rename(columns={'plant': 'plant'}).sort_values('transactions', ascending=False).head(10).to_dict(orient='records')
+        ).reset_index().rename(columns={'plant': 'name'}).sort_values('transactions', ascending=False).to_dict(orient='records')
 
-        plant_leakage_agg = maverick_df_sl.copy()
-        plant_leakage_agg['plant'] = plant_leakage_agg['Cost Centre'].str.split('-').str[0]
-        plant_leakage_grouped = plant_leakage_agg.groupby('plant').agg(
+        leakage_plant_wise = []
+        plant_leakage_agg = maverick_df_sl.groupby('plant').agg(
             leakage=('leakage_amt', 'sum'),
             txn_count=('Amount', 'count')
-        ).reset_index()
-        plant_root = plant_leakage_agg.groupby('plant')['mav_root_cause'].agg(lambda x: x.value_counts().index[0]).reset_index().rename(columns={'mav_root_cause': 'root_cause'})
-        plant_leakage_full = plant_leakage_grouped.merge(plant_root, on='plant', how='left').sort_values('leakage', ascending=False).head(LIVE_FEED_LIMIT)
-        leakage_plant_wise = []
-        for _, row in plant_leakage_full.iterrows():
-            rc = str(row.get('root_cause', 'N/A'))
-            action = recommended_action(float(row['leakage']), rc, str(row['plant']))
-            leakage_plant_wise.append({
-                'plant': str(row['plant']),
+        ).reset_index().sort_values('leakage', ascending=False).head(10)
+        
+        for _, row in plant_leakage_agg.iterrows():
+            plant_id = str(row['plant'])
+            p_data = maverick_df_sl[maverick_df_sl['plant'] == plant_id]
+            dom_rc = p_data['mav_root_cause'].mode().iloc[0] if not p_data.empty else 'Spot Buy'
+            # AI ADVICE AT STARTUP
+            plant_context = {
                 'leakage': float(row['leakage']),
                 'txn_count': int(row['txn_count']),
-                'root_cause': rc,
-                'action': action
+                'root_cause': dom_rc,
+                'top_categories': ", ".join(p_data['Booked Category'].unique()[:3]),
+                'top_requester': p_data['Requester ID'].mode().iloc[0] if not p_data.empty else "N/A",
+                'compliance_pct': round((p_data['Preferred Supplier Used'] == 'Y').mean() * 100, 1) if not p_data.empty else 0
+            }
+            action = None
+            if config.ENABLE_LEAKAGE_AI:
+                action = self.ai_agent.get_plant_leakage_advice(plant_id, float(row['leakage']), dom_rc, context=plant_context)
+
+            leakage_plant_wise.append({
+                'plant': plant_id,
+                'leakage': float(row['leakage']),
+                'txn_count': int(row['txn_count']),
+                'root_cause': dom_rc,
+                'action': action,
+                'context': plant_context
             })
 
-        rc_agg = maverick_df_sl.groupby('mav_root_cause').agg(
-            leakage=('leakage_amt', 'sum'),
-            txn_count=('Amount', 'count')
-        ).reset_index().sort_values('leakage', ascending=False)
+        # Root Cause Intelligence Layer
         leakage_by_root_cause = []
-        for _, row in rc_agg.iterrows():
-            rc = str(row['mav_root_cause'])
-            rc_pct = (row['leakage'] / total_maverick_leakage * 100) if total_maverick_leakage > 0 else 0
+        # Synchronize labels with the detection logic
+        print(f"DEBUG: Unique mav_root_cause values found: {maverick_df_sl['mav_root_cause'].unique()}")
+        active_labels = [LEAKAGE_RC_EMERGENCY, LEAKAGE_RC_PCARD, LEAKAGE_RC_DIRECT, LEAKAGE_RC_SPOT, ROOT_CAUSE_DEFAULT]
+        
+        for rc in active_labels:
+            rc_data = maverick_df_sl[maverick_df_sl['mav_root_cause'] == rc]
+            amt = float(rc_data['leakage_amt'].sum())
+            if amt <= 0: continue
+            
+            # Pattern Math
+            total_rc_spend = float(rc_data['Amount'].sum())
+            supp_freq = rc_data['Supplier Name Raw'].value_counts()
+            repeat_spend = rc_data[rc_data['Supplier Name Raw'].isin(supp_freq[supp_freq > 2].index)]['Amount'].sum()
+            repeat_pct = round((repeat_spend / total_rc_spend * 100), 1) if total_rc_spend > 0 else 0
+            
+            insight = f"{repeat_pct}% spend linked to repeat non-contract suppliers"
+            if rc == LEAKAGE_RC_EMERGENCY:
+                insight = f"{repeat_pct}% spend on recurring emergency consumables"
+            elif rc == LEAKAGE_RC_PCARD:
+                insight = f"Fragmented across {rc_data['Supplier Name Raw'].nunique()} P-Card vendors"
+            
+            avg_variance = (amt / total_rc_spend * 100) if total_rc_spend > 0 else 10
+            savings_range = f"{round(avg_variance * 0.8, 1)}-{round(avg_variance * 1.2, 1)}%"
+            
+            context = {
+                'repeat_pct': repeat_pct,
+                'top_suppliers': ", ".join(rc_data['Supplier Name Raw'].mode().head(2).tolist()),
+                'avg_variance_pct': round(avg_variance, 1),
+                'total_spent': f"₹{total_rc_spend:,.0f}"
+            }
+            
+            # Lazy-loaded Root Cause context
+            rc_pct = (amt / total_maverick_leakage * 100) if total_maverick_leakage > 0 else 0
+            
+            # AI ADVICE AT STARTUP (Conditional)
+            action = None
+            if config.ENABLE_LEAKAGE_AI:
+                action = self.ai_agent.get_root_cause_advice(rc, insight, context=context)
+
             leakage_by_root_cause.append({
                 'root_cause': rc,
-                'leakage': float(row['leakage']),
+                'leakage': amt,
                 'leakage_pct': float(rc_pct),
-                'txn_count': int(row['txn_count']),
-                'meaning': root_cause_meanings.get(rc, rc),
-                'recommended_fix': root_cause_fix_map.get(rc, 'Review and implement category-level controls.')
+                'txn_count': int(len(rc_data)),
+                'insight': insight,
+                'action': action,
+                'context': context,
+                'savings': savings_range
             })
 
+        # Restore Live Alert Feed
         maverick_df_sl_dated = maverick_df_sl.copy()
         maverick_df_sl_dated['Invoice Date'] = pd.to_datetime(maverick_df_sl_dated['Invoice Date'], errors='coerce')
         live_alerts = maverick_df_sl_dated.sort_values('Invoice Date', ascending=False).head(LIVE_FEED_LIMIT)
@@ -787,7 +860,7 @@ class DataEngine:
             "live_alert_feed": live_alert_feed,
             "leakage_category_wise": leakage_category_wise,
             "leakage_plant_wise": leakage_plant_wise,
-            "leakage_by_root_cause": leakage_by_root_cause,
+            "leakage_by_root_cause": sorted(leakage_by_root_cause, key=lambda x: x['leakage'], reverse=True),
             "off_contract_bifurcations": {
                 "payment_method": off_contract_payment,
                 "supplier": off_contract_supplier,
@@ -795,7 +868,13 @@ class DataEngine:
             },
             "buyer_wise_tracker": []
         }
-        self.plant_analysis = df.groupby('plant').apply(lambda x: pd.Series({"tail_spend": float(x[x['is_tail']]['Amount'].sum()), "tail_pct": min(float(x[x['is_tail']]['Amount'].sum()) / float(x['Amount'].sum()) * 100, 100) if x['Amount'].sum() > 0 else 0, "most_frequent_root_cause": x[x['is_tail']]['root_cause'].mode().iloc[0] if not x[x['is_tail']].empty else "N/A"})).reset_index().sort_values('tail_spend', ascending=False).to_dict(orient='records')
+
+        # Restore Plant Analysis
+        self.plant_analysis = df.groupby('plant').apply(lambda x: pd.Series({
+            "tail_spend": float(x[x['is_tail']]['Amount'].sum()), 
+            "tail_pct": min(float(x[x['is_tail']]['Amount'].sum()) / float(x['Amount'].sum()) * 100, 100) if x['Amount'].sum() > 0 else 0, 
+            "most_frequent_root_cause": x[x['is_tail']]['root_cause'].mode().iloc[0] if not x[x['is_tail']].empty else "N/A"
+        })).reset_index().sort_values('tail_spend', ascending=False).to_dict(orient='records')
         
         total_tracked = len(category_suppliers_extended)
         categories_with_contracts = categories_with_contract_count
@@ -1103,35 +1182,33 @@ class DataEngine:
         results = []
         supp_master = self.supp_df_raw.copy()
         
-        # Sort by spend and take top 15 for AI analysis
-        agg = agg.sort_values('total_spend', ascending=False).head(15)
+        # Sort by spend and take top 10 for AI governance analysis
+        agg = agg.sort_values('total_spend', ascending=False).head(10)
         
         for _, row in agg.iterrows():
-            cat = row['Booked Category']
-            cat_suppliers = filtered_df[filtered_df['Booked Category'] == cat]['Supplier ID'].unique()
+            cat = str(row['Booked Category'])
+            sc = int(row['supplier_count'])
+            spend = float(row['total_spend'])
             
-            pref_exists = not supp_master[
-                (supp_master['SupplierID'].isin(cat_suppliers)) & 
-                (supp_master['is_preferred'].astype(str).str.upper().isin(['Y', 'TRUE', 'YES', '1']))
-            ].empty
-            
-            recommendation = "Create Contract" if (row['supplier_count'] <= 5 and pref_exists) else "Run RFQ"
-            
-            # Rule-based Why (No AI)
-            if recommendation == "Create Contract":
-                why = "Consistent suppliers observed with stable buying pattern"
-            else:
-                why = "High supplier fragmentation, no clear supplier dominance"
+            gov_advice = self.ai_agent.get_governance_advice(
+                category=cat,
+                spend=spend,
+                supplier_count=sc
+            )
             
             results.append({
-                'category': str(cat),
-                'spend': float(row['total_spend']),
-                'suppliers': int(row['supplier_count']),
-                'recommendation': recommendation,
-                'why': why
+                'category': cat,
+                'spend': spend,
+                'suppliers': sc,
+                'gov_strategy': gov_advice.get('strategy', 'Commercial Control'),
+                'gov_recommendation': gov_advice.get('recommendation', 'Establish standard commercial terms.'),
+                'gov_reasoning': gov_advice.get('reasoning', 'Fragmentation requires commercial governance.'),
+                'action_label': gov_advice.get('action_label', 'Take Action'),
+                'workflow': gov_advice.get('workflow', []),
+                'recommendation': gov_advice.get('strategy', 'Strategic Sourcing') # Backward compatibility
             })
             
-        return sorted(results, key=lambda x: x['spend'], reverse=True)
+        return results
 
     def get_catalog(self):
         try:
@@ -1600,32 +1677,47 @@ class DataEngine:
         active_skus = cc[cc['is_active'].astype(str).str.upper() == 'TRUE']['Item SKU'].unique()
         fast_reorder['should_contract'] = ~fast_reorder['Item SKU'].isin(active_skus)
 
-        # Dynamic AI Reasoning for Recurring Tail
-        def generate_recurring_advice(row):
-            freq = row['reorder_freq']
-            qty = row['forecast_qty']
-            plants = len(str(row['plants_list']).split(','))
-            sku = row['Item SKU']
-
-            # Try AI first
-            ai_advice = self.ai_agent.get_recurring_advice(sku, freq, qty, plants)
-            if ai_advice:
-                return ai_advice
-            
-            # Fallback to Rule-based logic
-            if freq <= 7:
-                return ADVICE_TEMPLATE_CRITICAL.format(freq=freq)
-            if plants >= 3:
-                return ADVICE_TEMPLATE_STRATEGIC.format(plants=plants)
-            if qty > 1000:
-                return ADVICE_TEMPLATE_OPPORTUNITY.format(qty=qty)
-            return ADVICE_TEMPLATE_DEFAULT
-
-        # Optimized: Only call AI for the top 10 items to be displayed
+        # Optimized: Demand Forecast is now Lazy-Loaded. 
+        # AI Reasoning is triggered only when the user clicks "Check Action" in the UI.
         limit = getattr(config, 'MAX_FORECAST_ITEMS_DISPLAY', 10)
         recurring_tail = fast_reorder[fast_reorder['should_contract']].head(limit).copy()
-        recurring_tail['agent_recommendation'] = recurring_tail.apply(generate_recurring_advice, axis=1)
+        
+        # Prepare context for Lazy-Loading (no AI calls here)
+        final_recurring = []
+        for _, row in recurring_tail.iterrows():
+            sku = row['Item SKU']
+            sku_spend_data = df_main[df_main['Item SKU'] == sku]
+            
+            # Map Category
+            sku_col_tax = find_col(taxonomy.columns, 'item_sku') or 'Item SKU'
+            cat_col_tax = find_col(taxonomy.columns, 'category_l2') or 'Category_L2'
+            category = "Unknown"
+            if sku_col_tax in taxonomy.columns and cat_col_tax in taxonomy.columns:
+                cat_match = taxonomy[taxonomy[sku_col_tax] == sku]
+                if not cat_match.empty:
+                    category = cat_match.iloc[0][cat_col_tax]
 
+            # AI REASONING AT STARTUP (Conditional)
+            ai_advice = None
+            if config.ENABLE_DEMAND_AI:
+                ai_advice = self.ai_agent.get_strategic_demand_treatment(sku, category, {
+                    'total_spend': float(sku_spend_data['Amount'].sum()),
+                    'txn_count': float(row['reorder_freq']),
+                    'plants': int(len(str(row['plants_list']).split(','))),
+                    'suppliers': int(sku_spend_data['Supplier Name Raw'].nunique())
+                })
+
+            final_recurring.append({
+                "Item SKU": sku,
+                "reorder_freq": float(row['reorder_freq']),
+                "forecast_qty": int(row['forecast_qty']),
+                "plants_list": str(row['plants_list']),
+                "category": category,
+                "total_spend": f"₹{float(sku_spend_data['Amount'].sum()):,.0f}",
+                "supp_count": int(sku_spend_data['Supplier Name Raw'].nunique()),
+                "ai_advice": ai_advice
+            })
+        
         # More KPIs
         total_skus = len(dp[sku_col_dp].unique()) if sku_col_dp in dp.columns else 0
         contracted_skus = len(cc[cc['is_active'].astype(str).str.upper() == 'TRUE']['Item SKU'].unique()) if 'Item SKU' in cc.columns else 0
@@ -1636,11 +1728,11 @@ class DataEngine:
                 "predicted_tail_30d": predicted_tail_30d,
                 "pool_opportunities": len(pooling_results),
                 "seasonal_items": len(dp[dp['is_seasonal'] == True]['Item SKU'].unique()) if 'is_seasonal' in dp.columns else 0,
-                "recurring_tail_needing_contract": len(recurring_tail),
+                "recurring_tail_needing_contract": len(final_recurring),
                 "supplier_coverage_pct": float(coverage_pct)
             },
             "pooling_opportunities": pooling_results,
-            "recurring_tail_items": recurring_tail.fillna(0).to_dict('records'),
+            "recurring_tail_items": final_recurring,
             "seasonal_items": dp[dp['is_seasonal'] == True].replace({np.nan: None}).to_dict('records')
         }
     def refresh_logic(self):

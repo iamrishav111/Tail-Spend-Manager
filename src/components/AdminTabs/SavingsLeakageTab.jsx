@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Info, ChevronDown, ChevronRight } from 'lucide-react';
+import { Activity, Info, ChevronDown, ChevronRight, X } from 'lucide-react';
 
 const SavingsLeakageTab = ({ data, formatCurrency }) => {
   const sle = data.savings_leakage_extended || {};
@@ -43,9 +43,9 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
   };
 
   const severityClass = (action = '') => {
-    if (action.startsWith('CRITICAL')) return 'text-danger font-bold';
-    if (action.startsWith('HIGH')) return 'text-warning font-bold';
-    if (action.startsWith('MEDIUM')) return 'text-primary font-semibold';
+    if (action.includes('CRITICAL') || action.includes('IMMEDIATE')) return 'text-danger font-bold';
+    if (action.includes('HIGH') || action.includes('STRATEGIC')) return 'text-warning font-bold';
+    if (action.includes('MEDIUM')) return 'text-primary font-semibold';
     return 'text-secondary';
   };
 
@@ -62,11 +62,69 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
     { id: 'sl-plant', label: 'By Plant' },
   ];
 
+  const [activePopover, setActivePopover] = useState(null);
+
+  const ActionCell = ({ action, id }) => {
+    const isExpanded = activePopover === id;
+
+    return (
+      <td className="relative py-2 px-1" style={{ minWidth: '140px' }}>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            setActivePopover(isExpanded ? null : id);
+          }}
+          className="btn btn-outline border-primary/30 text-primary text-[10px] font-bold py-1 px-3 hover:bg-primary/5 flex items-center gap-1.5 shadow-sm"
+          style={{ borderRadius: '12px' }}
+        >
+          <Activity size={12} />
+          {isExpanded ? 'Closing Plan...' : 'Check Action'}
+        </button>
+
+        {isExpanded && action && (
+          <div 
+            className="absolute right-0 top-0 translate-x-[-10px] translate-y-[-50%] z-[100] w-[450px] bg-white shadow-2xl rounded-2xl border border-border/50 p-5 animate-in fade-in zoom-in-95 duration-200"
+            style={{ filter: 'drop-shadow(0 25px 30px rgb(0 0 0 / 0.2))' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-border/30">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                <span className="text-[11px] font-black text-primary tracking-widest uppercase">STRATEGIC PLAYBOOK</span>
+              </div>
+              <button onClick={() => setActivePopover(null)} className="text-secondary hover:text-danger p-1 transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
+              {(action || '').split('\n').map((line, idx) => {
+                const trimmed = line.trim();
+                if (!trimmed) return <div key={idx} className="h-3" />;
+                
+                // Detection for the 2 main sections
+                const isHeader = trimmed.toUpperCase().includes('IMMEDIATE') || 
+                                 trimmed.toUpperCase().includes('STRATEGIC') || 
+                                 trimmed.toUpperCase().includes('CONTAINMENT') ||
+                                 (trimmed.includes(':') && trimmed.length < 40);
+
+                return (
+                  <div key={idx} className={`text-[12px] leading-relaxed mb-1.5 ${isHeader ? 'font-black text-primary uppercase tracking-wider mt-5 first:mt-0 pb-1 border-b border-primary/10' : 'text-secondary/90 font-medium pl-2'}`}>
+                    {trimmed.startsWith('-') || trimmed.startsWith('*') ? '• ' + trimmed.substring(1) : trimmed}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </td>
+    );
+  };
+
   return (
-    <div className="flex flex-col gap-3 relative">
+    <div className="flex flex-col gap-3 relative" onClick={() => setActivePopover(null)}>
       {/* Floating Section Nav */}
       <div className="sticky top-[124px] z-30 flex gap-2 flex-wrap bg-white/80 backdrop-blur-md border-b border-border py-2 px-1 shadow-sm mb-2 rounded-xl">
-
         {navSections.map(s => (
           <button
             key={s.id}
@@ -79,7 +137,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         ))}
       </div>
 
-      {/* KPI Tiles - Restored Colors */}
+      {/* KPI Tiles */}
       <div id="sl-kpis" className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-1">
         <div className="kpi-card kpi-card-danger p-3 relative group">
           <Info size={14} className="absolute top-2 right-2 text-danger opacity-30 group-hover:opacity-100 transition-opacity" title="Total spend that exceeded contracted rates in the last 90 days." />
@@ -104,12 +162,12 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         </div>
       </div>
 
-      {/* Live Alert Feed - Restored to Top */}
+      {/* Live Alert Feed */}
       <div id="sl-live" className="card p-0 overflow-hidden border-t-4" style={{ borderTopColor: '#ef4444' }}>
         <div className="p-3 border-b bg-danger-bg flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Activity size={16} className="text-danger animate-pulse" />
-            <h3 className="mb-0 text-danger text-sm font-bold">Live Alert Feed — Recent Maverick Transactions (Leakage &gt; 0)</h3>
+            <h3 className="mb-0 text-danger text-sm font-bold">Live Alert Feed — Recent Maverick Transactions</h3>
           </div>
         </div>
         <div className="table-container border-none" style={{ borderRadius: 0, maxHeight: '260px', overflowY: 'auto' }}>
@@ -149,7 +207,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
         </div>
       </div>
 
-      {/* Category Leakage with Restored Table Look + Dropdown */}
+      {/* Category Leakage Table */}
       <div id="sl-cat" className="card p-0 overflow-hidden">
         <div className="p-3 border-b bg-surface"><h3 className="mb-0 text-sm font-bold">Leakage by Category (Top 10)</h3></div>
         <div className="table-container border-none" style={{ borderRadius: 0 }}>
@@ -172,7 +230,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                   <React.Fragment key={i}>
                     <tr>
                       <td>
-                        <button onClick={() => toggleL2(item['Booked Category'])}>
+                        <button onClick={(e) => { e.stopPropagation(); toggleL2(item['Booked Category']); }}>
                           {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                       </td>
@@ -185,7 +243,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                           {item.leakage_pct?.toFixed(1)}%
                         </span>
                       </td>
-                      <td className={`text-xs ${severityClass(item.action)}`} style={{ maxWidth: '180px' }}>{item.action}</td>
+                      <ActionCell action={item.action} id={`cat-${i}`} />
                     </tr>
                     {isExpanded && (item.l3_breakdown || []).map((l3, j) => (
                       <tr key={`l3-${i}-${j}`} className="bg-surface/30">
@@ -199,6 +257,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                   </React.Fragment>
                 );
               })}
+              {catItems.length === 0 && <tr><td colSpan={7} className="text-center py-8 text-secondary font-medium italic">No category-wise leakage detected for the selected period.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -221,8 +280,9 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                 <th>Root Cause</th>
                 <th className="numeric">Leakage ₹</th>
                 <th className="numeric">% of Total</th>
-                <th>Definition</th>
-                <th>Recommended Fix</th>
+                <th>Pattern Insight</th>
+                <th className="text-center">Procurement Action</th>
+                <th className="numeric">Savings Potential</th>
               </tr>
             </thead>
             <tbody>
@@ -231,16 +291,20 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                   <td className="font-bold text-sm">{item.root_cause}</td>
                   <td className="numeric font-bold text-danger">{formatCurrency(item.leakage)}</td>
                   <td className="numeric font-bold text-xs">{item.leakage_pct?.toFixed(1)}%</td>
-                  <td className="text-xs text-secondary font-medium" style={{ maxWidth: '170px' }}>{item.meaning}</td>
-                  <td className="text-xs text-primary font-semibold" style={{ maxWidth: '190px' }}>{item.recommended_fix}</td>
+                  <td className="text-[10px] text-secondary italic font-medium">{item.insight}</td>
+                  <ActionCell action={item.action} id={`rc-${i}`} />
+                  <td className="numeric">
+                    <span className="badge badge-success text-[10px] py-0.5 px-2 font-bold">{item.savings}</span>
+                  </td>
                 </tr>
               ))}
+              {rootCauseItems.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-secondary font-medium italic">No maverick spend root causes identified.</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Plant-wise Leakage */}
+      {/* Plant-wise Leakage Table */}
       <div id="sl-plant" className="card p-0 overflow-hidden">
         <div className="p-3 border-b bg-surface"><h3 className="mb-0 text-sm font-bold">Plant Wise Leakage (Top 10)</h3></div>
         <div className="table-container border-none" style={{ borderRadius: 0 }}>
@@ -251,7 +315,7 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                 <th className="numeric">Leakage ₹</th>
                 <th className="numeric">Txns</th>
                 <th>Root Cause</th>
-                <th>Action</th>
+                <th>Action Strategy (AI)</th>
               </tr>
             </thead>
             <tbody>
@@ -261,9 +325,10 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
                   <td className="numeric font-bold text-danger">{formatCurrency(item.leakage)}</td>
                   <td className="numeric text-xs">{item.txn_count}</td>
                   <td><span className="badge badge-warning text-xs">{item.root_cause}</span></td>
-                  <td className={`text-xs ${severityClass(item.action)}`} style={{ maxWidth: '190px' }}>{item.action}</td>
+                  <ActionCell action={item.action} id={`rc-${i}`} />
                 </tr>
               ))}
+              {plantItems.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-secondary font-medium italic">No plant-level leakage data available.</td></tr>}
             </tbody>
           </table>
         </div>

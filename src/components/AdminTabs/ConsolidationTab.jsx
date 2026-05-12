@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { AlertOctagon, Search, Zap, X, CheckCircle, ShieldCheck, TrendingUp, AlertTriangle, Send, Loader, Package, Activity, Info } from 'lucide-react';
+import { AlertOctagon, Search, Zap, X, CheckCircle, ShieldCheck, TrendingUp, AlertTriangle, Send, Loader, Package, Activity, Info, List } from 'lucide-react';
 
 const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, catalogRecommendations }) => {
   const [consolidationSearch, setConsolidationSearch] = useState('');
   const [selectedActionCategory, setSelectedActionCategory] = useState(null);
+  const [selectedStrategy, setSelectedStrategy] = useState(null);
   const [selectedContractAction, setSelectedContractAction] = useState(null);
+  const [selectedGovernanceAction, setSelectedGovernanceAction] = useState(null);
+  const [selectedGovAdvice, setSelectedGovAdvice] = useState(null);
+  const [governanceStep, setGovernanceStep] = useState(0);
   const [rfqStatus, setRfqStatus] = useState(null);
   const [selectedCatalogAdd, setSelectedCatalogAdd] = useState(null);
   const [classifying, setClassifying] = useState(false);
@@ -23,6 +27,14 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
     { id: 'agent-strategies', label: 'Agent Strategies' },
   ];
 
+  const floatToK = (val) => {
+    if (!val) return '0';
+    if (val >= 10000000) return (val / 10000000).toFixed(1) + ' Cr';
+    if (val >= 100000) return (val / 100000).toFixed(1) + ' L';
+    if (val >= 1000) return (val / 1000).toFixed(1) + ' K';
+    return val.toString();
+  };
+
   return (
     <div className="flex flex-col gap-6 relative">
       {/* Sticky Table Navigation */}
@@ -40,7 +52,6 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
       </div>
 
       <div id="consolidation-kpis" className="grid grid-cols-1 md:grid-cols-4 gap-6">
-
         <div className="kpi-card kpi-card-primary p-4 relative group">
           <Info size={14} className="absolute top-2 right-2 text-primary opacity-30 group-hover:opacity-100 transition-opacity" title="Total number of tail categories analyzed for consolidation." />
           <div className="text-sm font-semibold text-primary mb-1">Categories Analyzed</div>
@@ -90,6 +101,7 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                   <th className="numeric text-primary">Target Suppliers</th>
                   <th className="numeric">Savings Impact</th>
                   <th className="text-center">Avg Risk Before → After</th>
+                  <th className="text-center">AI Strategy</th>
                   <th className="text-center">Action</th>
               </tr>
               </thead>
@@ -109,10 +121,18 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                   </td>
                   <td className="text-center">
                       <button 
-                          className="btn btn-primary text-xs py-1 px-3 font-bold"
+                          className="btn btn-outline text-[10px] py-1 px-3 font-bold border-primary/30 text-primary flex items-center gap-1.5 mx-auto"
+                          onClick={() => setSelectedStrategy(item)}
+                      >
+                          <Info size={12}/> View Logic
+                      </button>
+                  </td>
+                  <td className="text-center">
+                      <button 
+                          className="btn btn-primary text-xs py-1 px-3 font-bold whitespace-nowrap"
                           onClick={() => setSelectedActionCategory(item)}
                       >
-                          Take Action
+                          {item.ai_strategy?.action_type || "Take Action"}
                       </button>
                   </td>
                   </tr>
@@ -122,12 +142,11 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
           </div>
       </div>
 
-      {/* Contract Actions (Table 2) */}
       <div id="contract-actions" className="card p-0 overflow-hidden border-t-4 border-t-primary mt-6">
           <div className="p-4 border-b bg-surface flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
               <div>
-                  <h2 className="mb-0 text-lg flex items-center gap-2 text-text font-bold"><Zap size={20} className="text-primary" /> Contract Actions</h2>
-                  <p className="text-xs text-secondary font-medium">Identify categories where creating a contract or running an RFQ can control future spend.</p>
+                  <h2 className="mb-0 text-lg flex items-center gap-2 text-text font-bold"><Zap size={20} className="text-primary" /> Commercial Governance Actions</h2>
+                  <p className="text-xs text-secondary font-medium">Establish commercial controls and pricing governance for unmanaged tail spend categories.</p>
               </div>
           </div>
           <div className="table-container border-none" style={{ borderRadius: 0 }}>
@@ -137,45 +156,37 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                           <th>Category</th>
                           <th className="numeric">Uncontrolled spend</th>
                           <th className="numeric">Suppliers</th>
-                          <th>Agent Recommends</th>
-                          <th>Why</th>
+                          <th>AI Recommendation</th>
                           <th className="text-center">Action</th>
                       </tr>
                   </thead>
                   <tbody>
                       {contractDecisions.length === 0 && (
-                          <tr><td colSpan={6} className="text-center py-8 text-secondary">No recommendations found for this period.</td></tr>
+                          <tr><td colSpan={5} className="text-center py-8 text-secondary">No recommendations found for this period.</td></tr>
                       )}
                       {contractDecisions.map((item, i) => (
                           <tr key={i}>
                               <td className="font-semibold text-sm">{item.category}</td>
                               <td className="numeric font-bold text-primary">{formatCurrency(item.spend)}</td>
                               <td className="numeric font-medium">{item.suppliers}</td>
-                              <td><span className="badge badge-primary bg-primary/10 text-primary border-primary/20">{item.recommendation}</span></td>
-                              <td className="text-xs text-secondary font-medium italic max-w-[300px]">{item.why}</td>
                               <td className="text-center">
                                   <button 
-                                      className="btn btn-primary text-xs py-1.5 px-4 rounded-full font-bold"
-                                      style={{ backgroundColor: '#6d28d9' }}
+                                      className="btn btn-outline text-[10px] py-1 px-3 font-bold border-primary/30 text-primary flex items-center gap-1.5 mx-auto rounded-full hover:bg-primary/5 transition-colors"
+                                      onClick={() => setSelectedGovAdvice(item)}
+                                  >
+                                      <Info size={12}/> View Advice
+                                  </button>
+                              </td>
+                              <td className="text-center">
+                                  <button 
+                                      className="btn btn-primary text-xs py-1.5 px-4 rounded-full font-bold shadow-lg hover:scale-105 transition-transform"
+                                      style={{ backgroundColor: '#6d28d9', borderColor: '#6d28d9' }}
                                       onClick={() => {
-                                          if (item.recommendation === 'Run RFQ' || item.recommendation === 'Blanket PO') {
-                                              setSelectedActionCategory({
-                                                  ...item,
-                                                  supplier_count: item.suppliers,
-                                                  target_suppliers: 1,
-                                                  suppliers: [], 
-                                                  target_suppliers_list: [],
-                                                  estimated_savings: item.spend * 0.08,
-                                                  avg_risk_before: 6.5,
-                                                  avg_risk_after: 2.1,
-                                                  is_blanket_po: item.recommendation === 'Blanket PO'
-                                              });
-                                          } else {
-                                              setSelectedContractAction(item);
-                                          }
+                                          setSelectedGovernanceAction(item);
+                                          setGovernanceStep(0);
                                       }}
                                   >
-                                      Create Contract
+                                      {item.action_label || "Take Action"}
                                   </button>
                               </td>
                           </tr>
@@ -185,65 +196,106 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
           </div>
       </div>
 
-      {/* Contract Action Modal */}
-      {selectedContractAction && (
+      {/* Strategic Governance Advice Popover */}
+      {selectedGovAdvice && (
           <>
-              <div className="fixed inset-0 bg-black bg-opacity-40 z-[60] animate-fadeIn" onClick={() => setSelectedContractAction(null)}></div>
-              <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl z-[70] overflow-hidden animate-scaleIn">
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[120] animate-fadeIn" onClick={() => setSelectedGovAdvice(null)}></div>
+              <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl bg-white rounded-3xl shadow-3xl z-[130] overflow-hidden animate-scaleIn border border-primary/20">
                   <div className="p-6 bg-surface border-b flex justify-between items-center">
-                      <h2 className="text-xl font-bold text-text">Recommended Action</h2>
-                      <button onClick={() => setSelectedContractAction(null)} className="text-secondary hover:text-danger"><X size={24}/></button>
-                  </div>
-                  <div className="p-6 flex flex-col gap-6">
                       <div>
-                          <div className="text-xs font-bold text-secondary uppercase mb-2">Category</div>
-                          <div className="text-lg font-bold text-primary">{selectedContractAction.category}</div>
+                          <h2 className="text-xl font-black text-text flex items-center gap-2">
+                              <Zap size={24} className="text-primary"/> Strategic Governance Advice
+                          </h2>
+                          <p className="text-xs text-secondary font-bold uppercase tracking-widest mt-1">{selectedGovAdvice.category}</p>
                       </div>
-
-                      <div className="p-4 bg-primary-light rounded-lg border border-primary border-opacity-20">
-                          <div className="flex items-center gap-3 mb-2">
-                              <Zap size={18} className="text-primary"/>
-                              <span className="font-bold text-primary">{selectedContractAction.recommendation}</span>
-                          </div>
-                          <div className="text-sm font-medium text-secondary italic">
-                              "{selectedContractAction.why}"
-                          </div>
-                      </div>
-
-                      <div className="flex flex-col gap-3">
-                          <div className="text-xs font-bold text-secondary uppercase">Next Steps</div>
-                          <div className="text-sm text-text font-medium leading-relaxed">
-                              {selectedContractAction.recommendation === 'Run RFQ' ? (
-                                  <ul className="list-disc pl-5 flex flex-col gap-1">
-                                      <li>Invite top 3-5 potential vendors</li>
-                                      <li>Standardize technical specifications</li>
-                                      <li>Request competitive commercial offers</li>
-                                  </ul>
-                              ) : selectedContractAction.recommendation === 'Blanket PO' ? (
-                                  <ul className="list-disc pl-5 flex flex-col gap-1">
-                                      <li>Select preferred vendor for volume aggregation</li>
-                                      <li>Negotiate tiered pricing based on annual forecast</li>
-                                      <li>Establish call-off mechanism for easier buying</li>
-                                  </ul>
-                              ) : (
-                                  <ul className="list-disc pl-5 flex flex-col gap-1">
-                                      <li>Verify historical pricing trends</li>
-                                      <li>Establish direct negotiation with incumbent</li>
-                                      <li>Finalize contract terms</li>
-                                  </ul>
-                              )}
+                      <button onClick={() => setSelectedGovAdvice(null)} className="text-secondary hover:text-danger p-1"><X size={24}/></button>
+                  </div>
+                  
+                  <div className="p-8 flex flex-col gap-8">
+                      {/* Recommendation Section */}
+                      <div>
+                          <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-2">Recommendation</div>
+                          <div className="p-5 bg-primary/5 border border-primary/20 rounded-2xl">
+                              <div className="text-base font-black text-primary leading-tight">
+                                  {selectedGovAdvice.gov_recommendation}
+                              </div>
                           </div>
                       </div>
 
+                      {/* Reasoning Section */}
+                      <div>
+                          <div className="text-[10px] font-black text-secondary/60 uppercase tracking-widest mb-2">Reasoning</div>
+                          <div className="p-6 bg-surface-alt border border-border/50 rounded-2xl">
+                              <div className="text-sm font-bold text-secondary leading-relaxed whitespace-pre-line italic">
+                                  {selectedGovAdvice.gov_reasoning}
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="flex gap-4 mt-2">
+                          <button 
+                              className="btn btn-primary flex-1 py-4 rounded-xl font-bold text-base shadow-xl flex items-center justify-center gap-2"
+                              style={{ backgroundColor: '#6d28d9' }}
+                              onClick={() => {
+                                  setSelectedGovernanceAction(selectedGovAdvice);
+                                  setSelectedGovAdvice(null);
+                                  setGovernanceStep(0);
+                              }}
+                          >
+                              {selectedGovAdvice.action_label} <Send size={20}/>
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </>
+      )}
+
+      {/* AI Strategy Popover (Table 1) */}
+      {selectedStrategy && (
+          <>
+              <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80] animate-fadeIn" onClick={() => setSelectedStrategy(null)}></div>
+              <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-xl bg-white rounded-2xl shadow-3xl z-[90] overflow-hidden animate-scaleIn border border-primary/20">
+                  <div className="p-6 bg-surface border-b flex justify-between items-center">
+                      <div>
+                          <h2 className="text-xl font-black text-text flex items-center gap-2">
+                              <Zap size={24} className="text-primary"/> Strategic Sourcing Brief
+                          </h2>
+                          <p className="text-xs text-secondary font-bold uppercase tracking-widest mt-1">{selectedStrategy.category}</p>
+                      </div>
+                      <button onClick={() => setSelectedStrategy(null)} className="text-secondary hover:text-danger p-1"><X size={24}/></button>
+                  </div>
+                  
+                  <div className="p-8 flex flex-col gap-8">
+                      <div>
+                          <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-2">AI Decision</div>
+                          <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                              <div className="text-base font-bold text-primary leading-tight">
+                                  {selectedStrategy.ai_strategy?.decision?.replace('AI DECISION:', '').trim() || "Consolidate to preferred vendors"}
+                              </div>
+                          </div>
+                      </div>
+                      <div>
+                          <div className="text-[10px] font-black text-secondary/60 uppercase tracking-widest mb-2">Why</div>
+                          <div className="text-sm font-medium text-secondary leading-relaxed bg-surface-alt p-4 rounded-xl border border-border/50">
+                              {selectedStrategy.ai_strategy?.why?.replace('WHY:', '').trim() || "Fragmentation is causing price variance."}
+                          </div>
+                      </div>
+                      <div>
+                          <div className="text-[10px] font-black text-success/70 uppercase tracking-widest mb-2">Analysis</div>
+                          <div className="p-5 bg-success/5 border border-success/20 rounded-xl">
+                              <div className="text-sm text-secondary font-bold leading-relaxed whitespace-pre-line">
+                                  {String(selectedStrategy.ai_strategy?.strategy || "").replace('ANALYSIS:', '').trim() || "Analyze and consolidate."}
+                              </div>
+                          </div>
+                      </div>
                       <button 
-                          className="btn btn-primary w-full py-3 rounded-lg font-bold mt-4 shadow-lg"
-                          style={{ backgroundColor: '#6d28d9' }}
+                          className="btn btn-primary w-full py-4 rounded-xl font-bold"
                           onClick={() => {
-                              alert(`${selectedContractAction.recommendation} initiated for ${selectedContractAction.category}`);
-                              setSelectedContractAction(null);
+                              setSelectedActionCategory(selectedStrategy);
+                              setSelectedStrategy(null);
                           }}
                       >
-                          Proceed to {selectedContractAction.recommendation}
+                          {selectedStrategy.ai_strategy?.action_type || "Take Action"}
                       </button>
                   </div>
               </div>
@@ -273,126 +325,95 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                   
                   <div className="flex-1 overflow-y-auto p-5 bg-surface">
                       <div className="flex flex-col gap-5">
-                          {/* Fragmentation View */}
-                          <div id="consolidation-fragmentation" className="card p-0 border border-danger border-opacity-30">
-                              <div className="p-3 bg-danger-bg border-b border-danger border-opacity-30 font-bold text-danger text-xs flex items-center gap-2">
-                                  <AlertTriangle size={14}/> Current Fragmentation ({selectedActionCategory.supplier_count} Suppliers)
+                          {/* Metrics Strip */}
+                          <div className="grid grid-cols-3 gap-3">
+                              <div className="p-3 bg-white rounded-xl border border-border shadow-sm">
+                                  <div className="text-[10px] font-bold text-secondary uppercase">Current</div>
+                                  <div className="text-lg font-black text-danger">{selectedActionCategory.supplier_count} Vendors</div>
                               </div>
-                              <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto">
-                                  {(selectedActionCategory.suppliers || []).length > 0 ? (
-                                      selectedActionCategory.suppliers.map((s, i) => (
-                                          <div key={i} className="p-2.5 border rounded bg-white text-xs">
-                                              <div className="flex justify-between items-start mb-1">
-                                                  <div className="font-bold">{s.supplier_name}</div>
-                                                  <div className="font-bold text-danger">Risk: {s.risk_score}/10</div>
-                                              </div>
-                                              <div className="flex justify-between text-tertiary">
-                                                  <span>Volume: {formatCurrency(s.spend)}</span>
-                                                  <span>Rate: {s.contract_value ? `₹${s.contract_value}` : 'No Contract'}</span>
-                                              </div>
-                                          </div>
-                                      ))
-                                  ) : (
-                                      <div className="p-4 text-center text-xs text-secondary italic">Fragmentation data being calculated...</div>
-                                  )}
+                              <div className="p-3 bg-white rounded-xl border border-border shadow-sm">
+                                  <div className="text-[10px] font-bold text-secondary uppercase">Target</div>
+                                  <div className="text-lg font-black text-success">{selectedActionCategory.target_suppliers} Vendors</div>
+                              </div>
+                              <div className="p-3 bg-white rounded-xl border border-border shadow-sm">
+                                  <div className="text-[10px] font-bold text-secondary uppercase">Benefit</div>
+                                  <div className="text-lg font-black text-primary">₹{floatToK(selectedActionCategory.estimated_savings)}</div>
                               </div>
                           </div>
 
-                          {/* Recommendation View */}
-                          <div className="card p-0 border border-success">
-                              <div className="p-3 bg-success-bg border-b border-success font-bold text-success text-xs flex items-center gap-2">
-                                  <CheckCircle size={14}/> {selectedActionCategory.is_blanket_po ? 'Recommended Strategy' : `Recommended Targets (${selectedActionCategory.target_suppliers} Suppliers)`}
-                              </div>
-                              <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto">
-                                  {(selectedActionCategory.target_suppliers_list || []).length > 0 ? (
-                                      selectedActionCategory.target_suppliers_list.map((s, i) => (
-                                          <div key={i} className="p-2.5 border border-success border-opacity-30 rounded bg-success-bg bg-opacity-20 text-xs">
-                                              <div className="flex justify-between items-start mb-1">
-                                                  <div className="font-bold text-success">{s.supplier_name}</div>
-                                                  <div className="font-bold text-success">Risk: {s.risk_score}/10</div>
-                                              </div>
-                                              <div className="flex justify-between text-secondary">
-                                                  <span>Current Vol: {formatCurrency(s.spend)}</span>
-                                                  <span className="font-bold">Proposed Target</span>
-                                              </div>
-                                              <div className="mt-2 pt-2 border-t border-success border-opacity-20 text-[10px] text-success font-bold">
-                                                  Estimated Capacity Threshold: {formatCurrency(selectedActionCategory.suppliers.reduce((acc, curr) => acc + curr.spend, 0) / selectedActionCategory.target_suppliers)}
-                                              </div>
-                                          </div>
-                                      ))
-                                  ) : (
-                                      <div className="p-4 bg-success-bg bg-opacity-10 text-success text-xs leading-relaxed">
-                                          <strong>Optimization Strategy:</strong>
-                                          <p className="mt-1">
-                                              {selectedActionCategory.is_blanket_po 
-                                                  ? "Aggregation of recurring volumes under a single master agreement to leverage volume-based discounting." 
-                                                  : "Strategic RFQ to consolidate fragmented spend and eliminate high-risk/low-volume suppliers."}
-                                          </p>
-                                      </div>
-                                  )}
-                              </div>
-                          </div>
-
-                          {/* Impact Summary */}
-                          <div className="p-4 bg-primary-light rounded-lg border border-primary flex flex-col gap-2">
-                              <div className="text-xs font-bold text-primary flex items-center gap-2"><TrendingUp size={14}/> Impact Projection</div>
-                              <div className="grid grid-cols-2 gap-4 mt-1">
-                                  <div>
-                                      <div className="text-[10px] text-secondary uppercase font-bold">Est. Savings</div>
-                                      <div className="text-lg font-bold text-success">{formatCurrency(selectedActionCategory.estimated_savings)}</div>
+                          {/* Recommendation Logic Branching */}
+                          <div className={`p-4 rounded-xl border flex items-start gap-3 ${
+                              selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' 
+                              ? 'bg-primary/5 border-primary/20' 
+                              : 'bg-success/5 border-success/20'
+                          }`}>
+                              <Zap size={20} className={selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' ? 'text-primary' : 'text-success'}/>
+                              <div>
+                                  <div className="text-sm font-bold text-text">
+                                      {selectedActionCategory.ai_strategy?.action_type || 'Execute RFQ'}
                                   </div>
-                                  <div>
-                                      <div className="text-[10px] text-secondary uppercase font-bold">Risk Reduction</div>
-                                      <div className="text-lg font-bold text-text">{selectedActionCategory.avg_risk_before.toFixed(1)} → {selectedActionCategory.avg_risk_after.toFixed(1)}</div>
-                                  </div>
+                                  <p className="text-xs text-secondary mt-1 leading-relaxed">
+                                      {selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' 
+                                      ? 'AI suggests immediate migration. Stop buying from tail vendors and shift volume to the primary partner.'
+                                      : 'AI suggests a competitive bid. Consolidate volume to lock in better market rates with core vendors.'}
+                                  </p>
                               </div>
                           </div>
 
-                          {/* RFQ Document Preview */}
-                          {rfqStatus === 'preparing' && (
-                              <div className="card p-4 border-2 border-dashed border-primary bg-primary-light animate-pulse">
-                                  <div className="text-center text-sm font-bold text-primary">Generating RFQ Document Pack...</div>
-                              </div>
+                          {/* Dynamic Content: Matrix vs Migration Notice */}
+                          {selectedActionCategory.ai_strategy?.action_type !== 'Migrate Spend' ? (
+                            <div className="card p-0 border border-border overflow-hidden rounded-2xl shadow-sm">
+                                <div className="p-3 bg-surface border-b font-bold text-xs flex justify-between items-center">
+                                    <span className="flex items-center gap-2"><Package size={14}/> Supplier Matrix</span>
+                                    <span className="text-[10px] px-2 py-0.5 bg-danger/10 text-danger rounded-full uppercase">Current Status</span>
+                                </div>
+                                <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto bg-surface-alt">
+                                    {(selectedActionCategory.suppliers || []).map((s, i) => (
+                                        <div key={i} className="p-3 border rounded-xl bg-white shadow-sm flex justify-between items-center">
+                                            <div>
+                                                <div className="font-bold text-sm">{s.supplier_name}</div>
+                                                <div className="text-[10px] text-secondary font-medium">Vol: {formatCurrency(s.spend)} | Risk: {s.risk_score}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                {i < selectedActionCategory.target_suppliers ? (
+                                                    <span className="text-[10px] font-bold text-success bg-success/10 px-2 py-1 rounded-lg">RETAIN</span>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-danger bg-danger/10 px-2 py-1 rounded-lg">REMOVE</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                          ) : (
+                            <div className="p-5 bg-primary/5 border border-dashed border-primary/40 rounded-2xl text-center flex flex-col items-center gap-3">
+                                <Send size={32} className="text-primary/40 mt-2"/>
+                                <div className="text-sm font-bold text-primary">Migration Execution Flow</div>
+                                <p className="text-xs text-secondary leading-relaxed px-4">
+                                    This category is ready for immediate migration. No RFQ needed. Generating "Notice of Intent to Migrate" for tail suppliers.
+                                </p>
+                            </div>
                           )}
 
+                          {/* Document Preview */}
                           {rfqStatus && rfqStatus !== 'preparing' && (
-                              <div className="card p-5 border bg-white shadow-sm flex flex-col gap-4 animate-scaleIn">
+                              <div className="card p-5 border bg-white shadow-xl flex flex-col gap-4 animate-scaleIn rounded-2xl border-primary/20">
                                   <div className="flex justify-between items-start border-b pb-3">
                                       <div>
-                                          <div className="text-xs font-bold text-tertiary">{selectedActionCategory.is_blanket_po ? 'BLANKET PURCHASE ORDER (DRAFT)' : 'REQUEST FOR QUOTATION (DRAFT)'}</div>
-                                          <div className="text-base font-bold text-primary">{selectedActionCategory.is_blanket_po ? 'BPO' : 'RFQ'}-2024-{selectedActionCategory.category.substring(0,3).toUpperCase()}-001</div>
-                                      </div>
-                                      <div className="text-right">
-                                          <div className="text-[10px] font-bold text-secondary">DATE</div>
-                                          <div className="text-xs font-bold">{new Date().toLocaleDateString()}</div>
-                                      </div>
-                                  </div>
-                                  <div className="text-xs leading-relaxed text-secondary">
-                                      <p className="mb-2">We are {selectedActionCategory.is_blanket_po ? 'issuing a draft Blanket Purchase Order' : 'inviting you to participate in a consolidation RFQ'} for the <strong>{selectedActionCategory.category}</strong> category.</p>
-                                      <p className="mb-2"><strong>Total Estimated Annual Volume:</strong> {formatCurrency(selectedActionCategory.spend || (selectedActionCategory.suppliers || []).reduce((acc, curr) => acc + curr.spend, 0))}</p>
-                                      <p className="mb-4">{selectedActionCategory.is_blanket_po ? 'This agreement will cover all standard requirements for the next 12 months.' : 'Please submit your best commercial offer and capacity commitment within 7 business days.'}</p>
-                                      <div className="p-3 bg-surface rounded border text-[10px]">
-                                          <div className="font-bold mb-1">{selectedActionCategory.is_blanket_po ? 'Contract Period:' : 'Submission Deadline:'}</div>
-                                          <div>{selectedActionCategory.is_blanket_po ? '01/06/2024 - 31/05/2025' : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}</div>
-                                      </div>
-                                  </div>
-                                  <div className="flex justify-end pt-2">
-                                      {rfqStatus === 'sent' ? (
-                                          <div className="text-success font-bold text-sm flex items-center gap-2 bg-success-bg px-3 py-1.5 rounded-lg border border-success">
-                                              <CheckCircle size={16}/> {selectedActionCategory.is_blanket_po ? 'BPO Dispatched to Supplier' : `RFQ Dispatched to ${selectedActionCategory.target_suppliers} Targets`}
+                                          <div className="text-[10px] font-black text-tertiary uppercase">
+                                              {selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' ? 'MIGRATION NOTICE (DRAFT)' : 'RFQ DOCUMENT (DRAFT)'}
                                           </div>
+                                          <div className="text-base font-black text-primary">
+                                              {selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' ? 'MIG' : 'RFQ'}-2026-{selectedActionCategory.category.substring(0,3).toUpperCase()}
+                                          </div>
+                                      </div>
+                                      <Zap size={24} className="text-primary/20"/>
+                                  </div>
+                                  <div className="text-xs leading-relaxed text-secondary font-medium">
+                                      {selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' ? (
+                                          <p>Notify <strong>{selectedActionCategory.supplier_count - selectedActionCategory.target_suppliers}</strong> vendors of spend redirection to primary partners within 48 hours.</p>
                                       ) : (
-                                          <button 
-                                              className="btn btn-primary w-full font-bold flex items-center justify-center gap-2"
-                                              onClick={() => {
-                                                  setRfqStatus('sending');
-                                                  setTimeout(() => {
-                                                      setRfqStatus('sent');
-                                                  }, 1200);
-                                              }}
-                                          >
-                                              {rfqStatus === 'sending' ? 'Dispatching...' : (selectedActionCategory.is_blanket_po ? 'Confirm & Send BPO' : 'Confirm & Send RFQ')} <Send size={16}/>
-                                          </button>
+                                          <p>Launch bid for ₹{floatToK(selectedActionCategory.estimated_savings)} consolidation volume. Deadline: 7 days.</p>
                                       )}
                                   </div>
                               </div>
@@ -400,62 +421,173 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                       </div>
                   </div>
                   
-                  {(!rfqStatus || rfqStatus === 'preparing') && (
-                      <div className="p-4 border-t bg-white flex justify-end gap-3 items-center sticky bottom-0 shadow-lg">
-                          <button className="btn btn-outline font-bold" onClick={() => { setSelectedActionCategory(null); setRfqStatus(null); }}>Close</button>
+                  <div className="p-6 border-t bg-surface flex flex-col gap-3">
+                      {!rfqStatus || rfqStatus === 'preparing' ? (
                           <button 
-                              className="btn btn-primary font-bold flex items-center gap-2 px-6"
+                              className="btn btn-primary w-full py-4 rounded-xl font-bold shadow-xl flex items-center justify-center gap-2 text-base"
                               onClick={() => {
                                   setRfqStatus('preparing');
-                                  setTimeout(() => { setRfqStatus('preview'); }, 1200);
+                                  setTimeout(() => setRfqStatus('preview'), 800);
                               }}
                           >
-                              {selectedActionCategory.is_blanket_po ? 'Generate BPO Document' : 'Generate RFQ Pack'} <Send size={16}/>
+                              {selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' ? 'Review Migration Notice' : 'Review RFQ Document'} <Send size={20}/>
                           </button>
-                      </div>
-                  )}
-                  {rfqStatus === 'preview' && (
-                      <div className="p-4 border-t bg-white sticky bottom-0 shadow-lg">
+                      ) : rfqStatus === 'preview' ? (
                           <button 
-                              className="btn btn-primary w-full font-bold flex items-center justify-center gap-2 py-3 bg-success hover:bg-success-text"
+                              className="btn btn-success w-full py-4 rounded-xl font-bold shadow-xl flex items-center justify-center gap-2 text-base"
                               onClick={() => {
                                   setRfqStatus('sending');
-                                  setTimeout(() => { setRfqStatus('sent'); }, 1500);
+                                  setTimeout(() => setRfqStatus('sent'), 1200);
                               }}
                           >
-                              {selectedActionCategory.is_blanket_po ? 'Confirm & Dispatch BPO' : 'Confirm & Dispatch RFQ'} <CheckCircle size={18}/>
+                              {selectedActionCategory.ai_strategy?.action_type === 'Migrate Spend' ? 'Confirm Migration' : 'Confirm & Send RFQ'} <CheckCircle size={20}/>
                           </button>
-                      </div>
-                  )}
-                  {rfqStatus === 'sent' && (
-                      <div className="p-4 border-t bg-white sticky bottom-0">
-                          <button className="btn btn-outline w-full font-bold py-3" onClick={() => { setSelectedActionCategory(null); setRfqStatus(null); }}>Finish & Close</button>
-                      </div>
-                  )}
+                      ) : rfqStatus === 'sending' ? (
+                          <button className="btn btn-outline w-full py-4 rounded-xl font-bold opacity-70 animate-pulse" disabled>
+                              Processing...
+                          </button>
+                      ) : (
+                          <button 
+                              className="btn btn-outline w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 text-base"
+                              onClick={() => { setSelectedActionCategory(null); setRfqStatus(null); }}
+                          >
+                              <CheckCircle size={20} className="text-success"/> Done & Close
+                          </button>
+                      )}
+                      <button 
+                          className="btn btn-ghost w-full py-2 text-xs font-bold text-secondary"
+                          onClick={() => { setSelectedActionCategory(null); setRfqStatus(null); }}
+                      >
+                          Cancel
+                      </button>
+                  </div>
               </div>
           </>
       )}
 
-      {dashboardData.strategies && dashboardData.strategies.length > 0 && (
-          <div id="agent-strategies" className="flex flex-col gap-3 mt-6">
-              {dashboardData.strategies.map((strat, i) => (
-                  <div key={i} className={`alert-card ${strat.priority === 'High' ? 'alert-card-danger' : 'alert-card-warning'} flex items-start gap-3 p-4 border rounded-lg`}>
-                      <AlertTriangle size={20} className="mt-0.5 flex-shrink-0" />
+      {/* Governance Workflow Side Pane */}
+      {selectedGovernanceAction && (
+          <>
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[100] animate-fadeIn" onClick={() => setSelectedGovernanceAction(null)}></div>
+              <div className="fixed top-0 right-0 h-full w-full max-w-lg bg-white shadow-3xl z-[110] flex flex-col animate-slideInRight border-l border-primary/20">
+                  <div className="p-6 border-b bg-surface flex justify-between items-center">
                       <div>
-                          <h4 className="font-bold mb-1 flex items-center gap-2">
-                              Agent Recommendation
-                              <span className={`badge ${strat.priority === 'High' ? 'badge-danger' : 'badge-warning'} text-[10px]`}>{strat.priority} Priority</span>
-                          </h4>
-                          <div className="text-sm font-medium leading-relaxed">
-                              {strat.text}
+                          <div className="flex items-center gap-2 mb-1">
+                              <Zap size={20} className="text-primary"/>
+                              <h2 className="text-lg font-black text-text uppercase">Sourcing Workflow</h2>
+                          </div>
+                          <p className="text-xs text-secondary font-bold">{selectedGovernanceAction.category} | {selectedGovernanceAction.gov_strategy}</p>
+                      </div>
+                      <button className="text-secondary hover:text-danger p-1" onClick={() => setSelectedGovernanceAction(null)}>
+                          <X size={24} />
+                      </button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6 bg-surface">
+                      <div className="flex flex-col gap-6">
+                          {/* Strategy Summary */}
+                          <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl">
+                              <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">Commercial Goal</div>
+                              <div className="text-base font-bold text-primary mb-2">{selectedGovernanceAction.gov_strategy}</div>
+                              <p className="text-xs text-secondary leading-relaxed font-medium">
+                                  {selectedGovernanceAction.gov_why}
+                              </p>
+                          </div>
+
+                          {/* Interactive Workflow Steps */}
+                          <div className="flex flex-col gap-3">
+                              <div className="text-[10px] font-black text-secondary uppercase tracking-widest px-1">Execution Steps</div>
+                              {(selectedGovernanceAction.workflow || []).map((step, idx) => (
+                                  <div 
+                                      key={idx} 
+                                      className={`p-4 rounded-xl border transition-all duration-300 flex items-center gap-4 ${
+                                          idx < governanceStep 
+                                          ? 'bg-success/5 border-success/30 opacity-60' 
+                                          : idx === governanceStep 
+                                          ? 'bg-white border-primary shadow-md scale-[1.02]' 
+                                          : 'bg-surface-alt border-border opacity-40'
+                                      }`}
+                                  >
+                                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${
+                                          idx < governanceStep ? 'bg-success text-white' : 'bg-primary text-white'
+                                      }`}>
+                                          {idx < governanceStep ? <CheckCircle size={16}/> : idx + 1}
+                                      </div>
+                                      <div className="flex-1">
+                                          <div className={`text-sm font-bold ${idx < governanceStep ? 'text-success line-through' : 'text-text'}`}>
+                                              {step}
+                                          </div>
+                                      </div>
+                                      {idx === governanceStep && (
+                                          <button 
+                                              className="btn btn-primary text-[10px] py-1 px-3 font-bold uppercase rounded-lg"
+                                              onClick={() => setGovernanceStep(idx + 1)}
+                                          >
+                                              Complete
+                                          </button>
+                                      )}
+                                  </div>
+                              ))}
                           </div>
                       </div>
                   </div>
-              ))}
-          </div>
+                  
+                  <div className="p-6 border-t bg-surface flex flex-col gap-3">
+                      {governanceStep >= (selectedGovernanceAction.workflow || []).length ? (
+                          <div className="flex flex-col gap-4 animate-scaleIn">
+                              {/* Document Draft Preview */}
+                              <div className="p-5 bg-white border-2 border-primary/20 rounded-2xl shadow-inner mb-2">
+                                  <div className="flex justify-between items-center border-b pb-3 mb-3">
+                                      <div>
+                                          <div className="text-[10px] font-black text-tertiary uppercase tracking-widest">Generated Document</div>
+                                          <div className="text-sm font-black text-primary uppercase">
+                                              {selectedGovernanceAction.action_label.split(' ').slice(-1)[0]}-2026-{selectedGovernanceAction.category.substring(0,3).toUpperCase()}
+                                          </div>
+                                      </div>
+                                      <div className="bg-primary/10 p-2 rounded-lg">
+                                          <Package size={20} className="text-primary"/>
+                                      </div>
+                                  </div>
+                                  <div className="text-xs text-secondary font-medium leading-relaxed italic">
+                                      {selectedGovernanceAction.action_label.includes('RFQ') ? (
+                                          <p>This <strong>Sourcing RFQ</strong> covers ₹{floatToK(selectedGovernanceAction.spend)} of fragmented spend. It includes technical specs and commercial T&Cs ready for market bidding.</p>
+                                      ) : selectedGovernanceAction.action_label.includes('Blanket') ? (
+                                          <p>This <strong>Blanket Purchase Agreement</strong> locks in pricing for {selectedGovernanceAction.category} for the next 12 months based on historical volume.</p>
+                                      ) : selectedGovernanceAction.action_label.includes('Rate') ? (
+                                          <p>This <strong>Rate Contract (MSA)</strong> standardizes pricing for all services. Vendors will be required to align with these fixed rate cards.</p>
+                                      ) : (
+                                          <p>This <strong>Mini-Bid Framework</strong> establishes a panel of {selectedGovernanceAction.suppliers} approved vendors. Future projects will be bid among this group.</p>
+                                      )}
+                                  </div>
+                              </div>
+                              
+                              <button 
+                                  className="btn btn-success w-full py-4 rounded-xl font-black shadow-xl flex items-center justify-center gap-2 text-base animate-pulse"
+                                  onClick={() => {
+                                      alert(`${selectedGovernanceAction.action_label} finalized! Draft document has been sent to the Category Manager for approval.`);
+                                      setSelectedGovernanceAction(null);
+                                  }}
+                              >
+                                  Confirm & Lock Terms <ShieldCheck size={20}/>
+                              </button>
+                          </div>
+                      ) : (
+                          <div className="text-center text-[10px] font-bold text-secondary uppercase tracking-widest py-2">
+                              {governanceStep} of {(selectedGovernanceAction.workflow || []).length} steps completed
+                          </div>
+                      )}
+                      <button 
+                          className="btn btn-ghost w-full py-2 text-xs font-bold text-secondary"
+                          onClick={() => setSelectedGovernanceAction(null)}
+                      >
+                          Cancel Workflow
+                      </button>
+                  </div>
+              </div>
+          </>
       )}
 
-      {/* Catalog Recommendations (Table 3) */}
+      {/* Catalog Recommendations */}
       <div id="catalog-recommendations" className="card p-0 overflow-hidden border-t-4 border-t-warning mt-6">
           <div className="p-4 border-b bg-surface flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
               <div>
@@ -512,86 +644,6 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
               </table>
           </div>
       </div>
-
-      {/* Add to Catalog Modal */}
-      {selectedCatalogAdd && (
-          <>
-              <div className="fixed inset-0 bg-black bg-opacity-40 z-[60] animate-fadeIn" onClick={() => setSelectedCatalogAdd(null)}></div>
-              <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-2xl z-[70] overflow-hidden animate-scaleIn">
-                  <div className="p-6 bg-surface border-b flex justify-between items-center">
-                      <h2 className="text-xl font-bold text-text">Standardize for Catalog</h2>
-                      <button onClick={() => setSelectedCatalogAdd(null)} className="text-secondary hover:text-danger"><X size={24}/></button>
-                  </div>
-                  <div className="p-6 flex flex-col gap-6">
-                      <div>
-                          <div className="text-[10px] font-bold text-secondary uppercase mb-1">Item to Standardize</div>
-                          <div className="text-sm font-bold text-text">{selectedCatalogAdd.description}</div>
-                      </div>
-
-                      <div className="p-4 bg-primary-light rounded-xl border border-primary border-opacity-10">
-                          <h4 className="text-xs font-bold text-primary uppercase mb-3 flex items-center gap-2">
-                              <ShieldCheck size={14}/> AI Classification Result
-                          </h4>
-                          {classifying ? (
-                              <div className="flex items-center gap-2 text-secondary text-sm font-medium animate-pulse">
-                                  <Loader size={16} className="animate-spin" /> Classifying item...
-                              </div>
-                          ) : classificationResult ? (
-                              <div className="flex flex-col gap-3">
-                                  <div className="flex justify-between items-center bg-white p-2 rounded border border-primary border-opacity-20">
-                                      <span className="text-[10px] font-bold text-secondary uppercase">Level 1</span>
-                                      <span className="text-xs font-black text-primary">{classificationResult.l1}</span>
-                                  </div>
-                                  <div className="flex justify-between items-center bg-white p-2 rounded border border-primary border-opacity-20">
-                                      <span className="text-[10px] font-bold text-secondary uppercase">Level 2</span>
-                                      <span className="text-xs font-black text-primary">{classificationResult.l2}</span>
-                                  </div>
-                              </div>
-                          ) : <div className="text-xs text-danger">Failed to classify.</div>}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                              <label className="text-[10px] font-bold text-secondary uppercase block mb-1">Est. Savings</label>
-                              <div className="text-lg font-bold text-success">{formatCurrency(selectedCatalogAdd.potential_savings)}</div>
-                          </div>
-                          <div>
-                              <label className="text-[10px] font-bold text-secondary uppercase block mb-1">Forecast Qty</label>
-                              <div className="text-lg font-bold text-text">{selectedCatalogAdd.forecast_qty.toLocaleString()}</div>
-                          </div>
-                      </div>
-
-                      <button 
-                          className="btn btn-primary w-full py-4 rounded-xl font-bold mt-2 shadow-lg"
-                          style={{ backgroundColor: '#f59e0b', borderColor: '#f59e0b' }}
-                          disabled={classifying || !classificationResult}
-                          onClick={async () => {
-                              const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-                              const res = await fetch(`${API_BASE_URL}/api/add-to-catalog`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                      description: selectedCatalogAdd.description,
-                                      l1: classificationResult.l1,
-                                      l2: classificationResult.l2,
-                                      price: selectedCatalogAdd.potential_savings / selectedCatalogAdd.forecast_qty * 14, // Mock math for contract price
-                                      moq: 1,
-                                      supplier_id: 'S-VAR-999'
-                                  })
-                              });
-                              const json = await res.json();
-                              if (json.status === 'success') {
-                                  setSelectedCatalogAdd(null);
-                                  alert('Item standardized and added to catalog successfully.');
-                              }
-                          }}
-                      >
-                          <CheckCircle size={18}/> Confirm & Add to Catalog
-                      </button>
-                  </div>
-              </div>
-          </>
-      )}
     </div>
   );
 };

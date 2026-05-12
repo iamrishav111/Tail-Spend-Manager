@@ -111,6 +111,39 @@ def negotiation_chat(req: NegotiationRequest):
     response = engine.ai_agent.chat_negotiation(context, req.history)
     return {"status": "success", "data": {"reply": response}}
 
+@app.post("/api/ai/demand-reasoning")
+def get_demand_reasoning(req: dict):
+    """Lazy-loaded AI reasoning for Demand Forecast items."""
+    sku = req.get('sku')
+    category = req.get('category')
+    context = req.get('context')
+    return {"status": "success", "data": engine.ai_agent.get_strategic_demand_treatment(sku, category, context)}
+
+@app.post("/api/ai/root-cause-advice")
+def get_root_cause_advice(req: dict):
+    """Lazy-loaded AI reasoning for Root Causes."""
+    rc = req.get('root_cause')
+    insight = req.get('insight')
+    context = req.get('context')
+    return {"status": "success", "data": engine.ai_agent.get_root_cause_advice(rc, insight, context)}
+
+@app.post("/api/ai/plant-advice")
+def get_plant_advice(req: dict):
+    """Lazy-loaded AI reasoning for Plants."""
+    plant_id = req.get('plant_id')
+    dom_rc = req.get('root_cause')
+    leakage = req.get('leakage')
+    return {"status": "success", "data": engine.ai_agent.get_plant_leakage_advice(plant_id, dom_rc, leakage)}
+
+@app.post("/api/ai/category-advice")
+def get_category_advice(req: dict):
+    """Lazy-loaded AI reasoning for Categories (Detailed 8-bullet playbook)."""
+    category = req.get('category')
+    leakage = req.get('leakage')
+    root_cause = req.get('root_cause')
+    context = req.get('context')
+    return {"status": "success", "data": engine.ai_agent.get_category_leakage_advice(category, leakage, root_cause, context)}
+
 @app.get("/api/negotiation/meta")
 def negotiation_meta():
     suppliers = engine.df_main['Supplier Name Raw'].dropna().unique().tolist()

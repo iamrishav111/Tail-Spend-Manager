@@ -4,7 +4,7 @@ echo.
 
 :: Start Backend in a new window
 echo Starting Backend (FastAPI)...
-start "Backend Server" cmd /k "python backend/main.py"
+start "Backend Server" cmd /k "py backend/main.py"
 
 :: Start Frontend in current window
 echo Starting Frontend (Vite)...

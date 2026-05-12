@@ -2,6 +2,86 @@ import React, { useState } from 'react';
 import { Package, ShieldCheck, Activity, X, CheckCircle, Zap, AlertTriangle, AlertOctagon, Loader, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+const RecurringItemRow = ({ item, formatCurrency }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const ai = item.ai_advice;
+
+  return (
+      <tr className="hover:bg-muted/30 transition-colors">
+          <td className="py-4">
+              <div className="font-bold text-xs text-primary">{item['Item SKU']}</div>
+              <div className="text-[9px] text-secondary font-medium mt-1">Reorder Every: <span className="text-danger font-bold">{item.reorder_freq.toFixed(1)} days</span></div>
+          </td>
+          <td className="numeric font-black text-secondary">
+              {item.forecast_qty.toLocaleString()}
+              <div className="text-[9px] font-medium text-tertiary">UNITS</div>
+          </td>
+          <td className="text-center">
+              <span className="badge badge-danger text-[10px]">No Contract</span>
+          </td>
+          <td className="py-4">
+              {!isExpanded ? (
+                  <button 
+                      className="btn btn-primary text-[10px] py-1 px-4 font-bold flex items-center gap-2 rounded-full transition-all hover:scale-105 active:scale-95 shadow-sm"
+                      onClick={() => setIsExpanded(true)}
+                  >
+                      <Zap size={12}/>
+                      Check Strategic Action
+                  </button>
+              ) : (
+                  <div className="animate-in fade-in zoom-in-95 duration-200 p-4 bg-white border border-primary/20 rounded-xl shadow-lg max-w-xl relative">
+                      <button 
+                          onClick={() => setIsExpanded(false)} 
+                          className="absolute right-3 top-3 text-secondary hover:text-danger p-1"
+                      >
+                          <X size={14}/>
+                      </button>
+                      <div className="flex justify-between items-start mb-3">
+                          <span className="px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-md text-[9px] font-black uppercase tracking-tighter">
+                              {ai?.opportunity || "Strategy Review"}
+                          </span>
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <div>
+                              <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">Next Steps</div>
+                              <div className="text-[11px] font-bold text-secondary leading-relaxed whitespace-pre-line">
+                                  {ai?.recommendation}
+                              </div>
+                          </div>
+                          
+                          <div>
+                              <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">Reasoning</div>
+                              <div className="text-[10px] text-secondary/80 leading-relaxed italic border-l-2 border-warning/30 pl-3">
+                                  {ai?.reasoning}
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between gap-3 pt-3 border-t border-border/50">
+                          <div className="flex items-start gap-1.5 p-2 bg-surface rounded-lg flex-1">
+                              <Zap size={10} className="text-primary mt-0.5 shrink-0"/>
+                              <div className="text-[9px] font-medium text-secondary/60 leading-tight">{ai?.market_insight}</div>
+                          </div>
+                          
+                          {/* Conditional Add to Catalog Button */}
+                          {(ai?.opportunity?.toLowerCase().includes('catalog') || 
+                            ai?.opportunity?.toLowerCase().includes('standardization') || 
+                            ai?.opportunity?.toLowerCase().includes('contract')) && 
+                           !ai?.opportunity?.toLowerCase().includes('blanket') && (
+                              <button className="btn btn-primary text-[9px] py-1.5 px-3 font-bold flex items-center gap-1.5 rounded-lg shrink-0">
+                                  <Package size={12}/>
+                                  Add to Catalog
+                              </button>
+                          )}
+                      </div>
+                  </div>
+              )}
+          </td>
+      </tr>
+  );
+};
+
 const DemandForecastTab = ({ dashboardData, formatCurrency }) => {
   const navigate = useNavigate();
   const [selectedPoolItem, setSelectedPoolItem] = useState(null);
@@ -239,25 +319,22 @@ const DemandForecastTab = ({ dashboardData, formatCurrency }) => {
                   <thead>
                       <tr>
                           <th>Item SKU</th>
-                          <th className="numeric">Reorder Every</th>
-                          <th className="numeric">Forecast Qty (90d)</th>
-                          <th>Plants</th>
-                          <th>Contract?</th>
-                          <th>Agent Recommendation</th>
+                          <th className="numeric">Forecast (90d)</th>
+                          <th className="text-center">Status</th>
+                          <th>Action Intelligence</th>
                       </tr>
                   </thead>
                   <tbody>
                       {dfData.recurring_tail_items.map((item, i) => (
-                          <tr key={i}>
-                              <td className="font-bold text-xs">{item['Item SKU']}</td>
-                              <td className="numeric font-semibold text-danger">{item.reorder_freq.toFixed(1)} days</td>
-                              <td className="numeric">{item.forecast_qty.toLocaleString()}</td>
-                              <td className="text-xs text-secondary">{item.plants_list}</td>
-                              <td><span className="badge badge-danger text-[10px]">No Contract</span></td>
-                              <td className="text-xs font-medium text-primary" style={{ maxWidth: '200px' }}>{item.agent_recommendation}</td>
-                          </tr>
+                          <RecurringItemRow key={i} item={item} formatCurrency={formatCurrency} />
                       ))}
-                      {dfData.recurring_tail_items.length === 0 && <tr><td colSpan={6} className="text-center py-6 text-secondary">No recurring tail items requiring urgent contracting.</td></tr>}
+                      {dfData.recurring_tail_items.length === 0 && (
+                          <tr>
+                              <td colSpan={4} className="text-center py-6 text-secondary font-medium">
+                                  No recurring tail items requiring urgent contracting.
+                              </td>
+                          </tr>
+                      )}
                   </tbody>
               </table>
           </div>
