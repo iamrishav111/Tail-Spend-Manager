@@ -10,6 +10,7 @@ SHEET_ID = os.getenv("SHEET_ID", "")
 ENABLE_AI_ADVICE = True    # Master toggle for AI
 ENABLE_LEAKAGE_AI = os.getenv("ENABLE_LEAKAGE_AI", "True").lower() == "true"
 ENABLE_DEMAND_AI = os.getenv("ENABLE_DEMAND_AI", "True").lower() == "true"
+ENABLE_CONSOLIDATION_AI = os.getenv("ENABLE_CONSOLIDATION_AI", "True").lower() == "true"
 AI_PROVIDER = os.getenv("AI_PROVIDER", "groq")
 GROQ_API_KEYS_RAW = os.getenv("GROQ_API_KEYS", "")
 GROQ_API_KEYS = [k.strip() for k in GROQ_API_KEYS_RAW.split(",") if k.strip()]
@@ -86,7 +87,7 @@ UNCONTROLLED_MIN_SPEND = 100000          # Min spend (₹1L) to flag uncontrolle
 PREDICTED_TAIL_TREND_MULTIPLIER = 1.05  # 5% buffer for future tail spend
 MIN_PLANTS_FOR_POOLING = 3             # Min plants needed to flag a pooling opportunity
 MAX_REORDER_DAYS_FOR_POOLING = 60      # Max reorder frequency for pooling
-RECURRING_TAIL_THRESHOLD_DAYS = 14     # Items ordered more often than this are "Recurring"
+RECURRING_TAIL_THRESHOLD_DAYS = 30     # Items ordered more often than this are "Recurring"
 ESTIMATED_POOLING_SAVINGS_PCT = 0.15   # 15% assumed savings for new pooling
 
 # --- Supplier Scoring Weights (Total = 1.0) ---

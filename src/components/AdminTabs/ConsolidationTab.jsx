@@ -270,14 +270,14 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                           <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-2">AI Decision</div>
                           <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
                               <div className="text-base font-bold text-primary leading-tight">
-                                  {selectedStrategy.ai_strategy?.decision?.replace('AI DECISION:', '').trim() || "Consolidate to preferred vendors"}
+                                  {String(selectedStrategy.ai_strategy?.decision || "").replace('AI DECISION:', '').trim() || "Consolidate to preferred vendors"}
                               </div>
                           </div>
                       </div>
                       <div>
                           <div className="text-[10px] font-black text-secondary/60 uppercase tracking-widest mb-2">Why</div>
                           <div className="text-sm font-medium text-secondary leading-relaxed bg-surface-alt p-4 rounded-xl border border-border/50">
-                              {selectedStrategy.ai_strategy?.why?.replace('WHY:', '').trim() || "Fragmentation is causing price variance."}
+                              {String(selectedStrategy.ai_strategy?.why || "").replace('WHY:', '').trim() || "Fragmentation is causing price variance."}
                           </div>
                       </div>
                       <div>
@@ -489,8 +489,12 @@ const ConsolidationTab = ({ dashboardData, formatCurrency, contractDecisions, ca
                           <div className="p-4 bg-primary/5 border border-primary/20 rounded-2xl">
                               <div className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-1">Commercial Goal</div>
                               <div className="text-base font-bold text-primary mb-2">{selectedGovernanceAction.gov_strategy}</div>
-                              <p className="text-xs text-secondary leading-relaxed font-medium">
+                              <p className="text-xs text-secondary leading-relaxed font-medium mb-3">
                                   {selectedGovernanceAction.gov_why}
+                              </p>
+                              <div className="text-[10px] font-black text-success/70 uppercase tracking-widest mb-1 pt-3 border-t border-primary/10">Expected Impact</div>
+                              <p className="text-xs text-secondary leading-relaxed font-medium whitespace-pre-line">
+                                  {selectedGovernanceAction.gov_impact}
                               </p>
                           </div>
 

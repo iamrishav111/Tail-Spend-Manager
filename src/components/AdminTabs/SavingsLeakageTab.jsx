@@ -98,23 +98,63 @@ const SavingsLeakageTab = ({ data, formatCurrency }) => {
             </div>
             
             <div className="overflow-y-auto max-h-[500px] pr-2 custom-scrollbar">
-              {(action || '').split('\n').map((line, idx) => {
-                const trimmed = line.trim();
-                if (!trimmed) return <div key={idx} className="h-3" />;
-                
-                // Detection for the 2 main sections
-                const isHeader = trimmed.toUpperCase().includes('IMMEDIATE') || 
-                                 trimmed.toUpperCase().includes('STRATEGIC') || 
-                                 trimmed.toUpperCase().includes('CONTAINMENT') ||
-                                 (trimmed.includes(':') && trimmed.length < 40);
+              {(() => {
+                const lines = (action || '').split('\n');
+                return lines.map((line, idx) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return <div key={idx} className="h-2" />;
 
-                return (
-                  <div key={idx} className={`text-[12px] leading-relaxed mb-1.5 ${isHeader ? 'font-black text-primary uppercase tracking-wider mt-5 first:mt-0 pb-1 border-b border-primary/10' : 'text-secondary/90 font-medium pl-2'}`}>
-                    {trimmed.startsWith('-') || trimmed.startsWith('*') ? '• ' + trimmed.substring(1) : trimmed}
-                  </div>
-                );
-              })}
+                  const isHeader = trimmed.includes('📊') || trimmed.includes('⚡') || trimmed.includes('🏗️');
+                  
+                  if (isHeader) {
+                    return (
+                      <div key={idx} className="text-[11px] font-black text-primary uppercase tracking-wider mt-6 first:mt-0 pb-1 border-b border-primary/10 mb-3">
+                        {trimmed}
+                      </div>
+                    );
+                  }
+
+                  // Diagnosis row parsing: Driver | Evidence | Why
+                  if (trimmed.includes('|') && trimmed.split('|').length >= 2) {
+                    const parts = trimmed.split('|');
+                    return (
+                      <div key={idx} className="playbook-diagnosis-row mb-1 flex flex-col gap-1 p-2 bg-primary/5 rounded border-l-2 border-primary">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="font-bold text-primary">{parts[0].trim()}</span>
+                          <span className="text-secondary italic">{parts[1].trim()}</span>
+                        </div>
+                        {parts[2] && <div className="text-[10px] text-text/70 mt-1 border-t border-primary/5 pt-1"><strong>Why:</strong> {parts[2].trim()}</div>}
+                      </div>
+                    );
+                  }
+
+                  // Action | Why parsing
+                  if (trimmed.includes('Action:') && trimmed.includes('Why:')) {
+                    const [actionPart, whyPart] = trimmed.split('|');
+                    return (
+                      <div key={idx} className="mb-3 pl-4 relative text-[12px]">
+                        <span className="absolute left-0 text-primary">•</span>
+                        <div className="font-bold text-text">{actionPart.replace('Action:', '').trim()}</div>
+                        <div className="text-[11px] text-secondary mt-0.5 bg-surface-alt p-1.5 rounded italic">
+                           {whyPart.trim()}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={idx} className="text-[12px] leading-relaxed mb-2 text-secondary/90 font-medium pl-4 relative">
+                      {!isHeader && <span className="absolute left-0 text-primary/40">•</span>}
+                      {trimmed.startsWith('-') || trimmed.startsWith('*') ? trimmed.substring(1).trim() : trimmed}
+                    </div>
+                  );
+                });
+              })()}
             </div>
+
+
+
+
           </div>
         )}
       </td>

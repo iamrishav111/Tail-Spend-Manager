@@ -1,29 +1,31 @@
 from groq import Groq
-from config import GROQ_API_KEYS, ENABLE_AI_ADVICE
+from config import (
+    GROQ_API_KEYS, ENABLE_AI_ADVICE, CACHE_DIR, 
+    CONSOLIDATION_SAVINGS_FACTOR
+)
 import logging
 from ddgs import DDGS
+import json
+import os
 
 # Configure Logging
 logger = logging.getLogger(__name__)
 
 class TailSpendAIAgent:
     def __init__(self):
-        import config
-        self.enabled = False
-        if not config.ENABLE_AI_ADVICE:
+        if not ENABLE_AI_ADVICE:
             return
 
-        self.groq_keys = config.GROQ_API_KEYS
+        self.groq_keys = GROQ_API_KEYS
         self.current_key_idx = 0
         self.advice_cache = {}
-        
+        self.model_name = "llama-3.3-70b-versatile"
+
         self._init_clients()
         self._load_cache()
         self.enabled = True
 
     def _load_cache(self):
-        import json, os
-        from config import CACHE_DIR
         cache_file = os.path.join(CACHE_DIR, 'advice_cache.json')
         if os.path.exists(cache_file):
             try:
@@ -33,8 +35,6 @@ class TailSpendAIAgent:
                 self.advice_cache = {}
 
     def _save_cache(self):
-        import json, os
-        from config import CACHE_DIR
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR)
         cache_file = os.path.join(CACHE_DIR, 'advice_cache.json')
@@ -192,34 +192,47 @@ class TailSpendAIAgent:
             logger.error(f"Groq API Error in Negotiation Chat: {e}")
             return "Sorry, I encountered an error generating the negotiation strategy."
 
-
-    def get_recurring_advice(self, item_sku, freq, qty, plants):
+    def get_recurring_tail_strategy(self, item, spend, context):
         """
-        Generate contextual advice for a recurring tail item.
+        Operational strategy for recurring tail items (Llama 3.3 70b).
         """
-        cache_key = f"rec_{item_sku}_{freq}_{qty}_{plants}"
+        cache_key = f"rectail_v1_{item}_{spend}"
         if cache_key in self.advice_cache:
-            return self.advice_cache[cache_key]
+            # Handle cases where cache might have old string format
+            cached = self.advice_cache[cache_key]
+            if isinstance(cached, dict): return cached
 
         prompt = f"""
-        Analyze this procurement demand pattern and give a one-sentence "Agent Recommendation" for a procurement manager.
-        Item SKU: {item_sku}
-        Reorder Frequency: Every {freq:.1f} days
-        Forecasted Qty (90d): {qty:,.0f} units
-        Number of Plants buying this: {plants}
+        You are a Sourcing Lead. Fix this RECURRING TAIL item.
+        Item: {item} | Category: {context.get('category')}
+        Spend: ₹{spend:,.0f} | Frequency: Every {context.get('frequency_days', 0):.0f} days
+        Plants Involved: {context.get('plants', 1)}
+        Price Variance: ₹{context.get('avg_variance', 0):,.0f}
 
-        Rules:
-        1. Be concise (max 20 words).
-        2. Use a professional, strategic tone.
-        3. Suggest a specific procurement action (e.g., cataloging, blanket PO, RFQ).
-        
-        Output only the recommendation string.
+        RULES:
+        1. NO generic advice like "Improve sourcing".
+        2. Focus on: Cataloging, Blanket POs, or VMI (Vendor Managed Inventory).
+        3. Explain EXACTLY what to do in the ERP/Sourcing system.
+
+        OUTPUT FORMAT (JSON ONLY):
+        {{
+            "strategy": "Actionable Title (e.g., Move to Digital Catalog)",
+            "next_steps": "List 3 specific operational steps.",
+            "reasoning": "Data-linked why (e.g., 'Recurring frequency of {context.get('frequency_days', 0):.0f} days suggests this is a stockable consumable.')"
+        }}
         """
-
-        advice = self._call_ai(prompt)
-        if advice:
+        try:
+            response = self._create_completion(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"}
+            )
+            advice = json.loads(response.choices[0].message.content.strip())
             self.advice_cache[cache_key] = advice
-        return advice
+            return advice
+        except Exception as e:
+            return {"strategy": "Audit Required", "next_steps": "Review PO history.", "reasoning": "High frequency bypass detected."}
+
 
     def get_category_leakage_advice(self, category, leakage_val, root_cause, context=None):
         """
@@ -259,31 +272,38 @@ class TailSpendAIAgent:
         
         # Format Context
         suppliers = context.get('top_suppliers', 'Unknown Suppliers')
-        variance = context.get('avg_variance_pct', 'N/A')
-        
+        variance = context.get('avg_variance_pct', 0)
         prompt = f"""
-        You are a Sourcing Execution Lead. Provide a NO-FLUFF, IMPLEMENTATION-READY playbook.
+        You are a Senior Sourcing Lead. Provide a HIGH-DETAIL, OPERATIONAL playbook for {category}.
         
         DATA CONTEXT:
         - Category: {category} | Impact: ₹{leakage_val:,.0f}
+        - Root Cause: {root_cause}
         - Top Leaking Suppliers: {suppliers}
         - Price Variance: {variance}% above benchmark
-        - Market Intel: {market_intel}
-        - Strategic Levers: {levers}
+        - Evidence: {context.get('fragmentation_evidence', 'N/A')}
 
-        INSTRUCTIONS:
-        1. BAN these words: 'Develop', 'Establish', 'Strategic Plan', 'Management Team', 'Execute', 'Program'.
-        2. MANDATORY: Every bullet must mention a specific Supplier or Category from the data above.
-        3. For every action, explain EXACTLY HOW to do it (e.g., 'In the ERP, block Supplier X and redirect to Supplier Y').
-        4. Focus on quantified results (e.g., 'Capture ₹50k/month savings').
-        
+        STRICT FORMATTING RULES:
+        1. LANGUAGE: Use extremely simple, jargon-free English. (Avoid: 'leverage', 'strategic', 'optimize', 'rationalize').
+        2. SPECIFICITY: Mention the actual suppliers ({suppliers}) and specific system actions (ERP, P-Card block, RFQ).
+        3. LENGTH: Each point must be 2-3 lines of detailed text.
+        4. DELIMITERS: You MUST use the "|" character to separate fields for the UI parser.
+
         STRUCTURE:
-        Generate exactly 2 sections. 4 bullets per section. Bullet length: 40-50 words.
         
-        SECTION 1: ⚡ IMMEDIATE CONTAINMENT
-        SECTION 2: 🏗️ STRATEGIC SOURCING
+        ## SECTION 1: 📊 LEAKAGE DIAGNOSIS
+        - Driver: [Name] | Evidence: [Detailed evidence with {variance}% and {suppliers}] | Why: Why it matters: [2-line operational impact]
+        (Provide 3 distinct, detailed drivers using the pipe format above)
 
-        OUTPUT ONLY THE 8 BULLETS.
+        ## SECTION 2: ⚡ IMMEDIATE ACTIONS — NEXT 7 DAYS
+        - Action: [Specific action involving {suppliers}] | Why: [Detailed 2-line reasoning for this action]
+        (Provide 4 distinct, detailed actions using "Action: ... | Why: ..." format)
+
+        ## SECTION 3: 🏗️ STRATEGIC FIXES — NEXT 30–60 DAYS
+        - Action: [Specific policy or system change for {root_cause}] | Why: [Detailed 2-line business impact]
+        (Provide 4 distinct, detailed strategic fixes using "Action: ... | Why: ..." format)
+
+        OUTPUT ONLY THE SECTIONS. BE EXTREMELY DETAILED AND SPECIFIC.
         """
 
         try:
@@ -292,11 +312,22 @@ class TailSpendAIAgent:
                 model="llama-3.3-70b-versatile"
             )
             advice = response.choices[0].message.content.strip()
+            
+            # Robust pipe-checking to ensure frontend doesn't break
+            processed_lines = []
+            for line in advice.split('\n'):
+                if 'Driver:' in line and '|' not in line:
+                    line = line.replace('Evidence:', '| Evidence:').replace('Why:', '| Why:')
+                elif 'Action:' in line and '|' not in line:
+                    line = line.replace('Why:', '| Why:')
+                processed_lines.append(line)
+            
+            advice = '\n'.join(processed_lines)
             self.advice_cache[cache_key] = advice
             return advice
         except Exception as e:
             logger.error(f"Category Advice Error: {e}")
-            return "Strategy generation temporarily unavailable due to capacity."
+            return "Strategy generation temporarily unavailable."
 
     def get_plant_leakage_advice(self, plant, leakage_val, root_cause, context=None):
         """
@@ -318,26 +349,30 @@ class TailSpendAIAgent:
             return self.advice_cache[cache_key]
 
         prompt = f"""
-        You are an Operations Director. Stop the ₹{l_val:,.0f} bypass at the {plant} site.
+        You are a Procurement Operations Director. Fix the ₹{l_val:,.0f} leakage at {plant}.
+        Focus EXCLUSIVELY on PROCESS & GOVERNANCE CONTROLS. 
+        NO HR or internal audit language.
         
-        SITE AUDIT DATA:
-        - Categories Bypassed at {plant}: {bypass_cats}
+        SITE DATA:
+        - Bypassed Categories: {bypass_cats}
         - Top Maverick Requester: {top_user}
         - Site Compliance: {compliance}%
+        - Pattern: {root_cause}
         
-        INSTRUCTIONS:
-        1. BAN these words: 'Develop', 'Establish', 'Review', 'Management Team', 'Encourage'.
-        2. Be BRUTALLY SPECIFIC. Tell the Site Manager exactly which categories and users to lock down.
-        3. Explain HOW to do it (e.g., 'Revoke P-Card authority for {top_user} for the {bypass_cats} category').
-        
-        STRUCTURE:
-        Exactly 2 sections. 4 bullets per section. Bullet length: 40-50 words.
-        
-        SECTION 1: ⚡ IMMEDIATE SITE CONTROLS
-        SECTION 2: 🏗️ COMPLIANCE & BEHAVIORAL ENFORCEMENT
+        OPERATIONAL RULES:
+        1. Action examples: 'Reduce P-Card threshold at {plant} from ₹2L to ₹50k', 'Disable MCC blocks for maintenance', 'Route weekend PRs to secondary approval'.
+        2. Differentiate based on patterns: non-business hours, cluster splitting, repeat emergency buys.
+        3. DATA-DRIVEN: Every action must map to the diagnosis (e.g., 'Because 58 P-Card transactions bypassed PO workflow').
 
-        OUTPUT ONLY THE 8 BULLETS.
+        STRUCTURE:
+        Exactly 2 sections. 4 bullets per section.
+        
+        SECTION 1: ⚡ IMMEDIATE PROCESS CONTROLS
+        SECTION 2: 🏗️ PROCUREMENT GOVERNANCE IMPROVEMENTS
+
+        OUTPUT ONLY THE BULLETS.
         """
+
 
         try:
             response = self._create_completion(
@@ -514,27 +549,26 @@ class TailSpendAIAgent:
             return self.advice_cache[cache_key]
 
         prompt = f"""
-        You are a Procurement Specialist. Simplify this consolidation plan. 
-        Focus on CLEAR ACTIONS and NO JARGON.
-        
-        CATEGORY: {category}
-        CURRENT STATE: {current_suppliers} vendors
-        TARGET STATE: {target_suppliers} vendors (THIS IS THE GOAL)
-        SAVINGS IMPACT: ₹{float(savings):,.0f}
-        
-        OUTPUT STRUCTURE (STRICT JSON):
+        You are a Senior Sourcing Lead. Determine the optimal supplier count and execution plan for {category}.
+        Current Vendors: {current_suppliers} | Target Suggestion: {target_suppliers} (based on {current_suppliers}/2.5 ratio)
+        Category Spend Intensity: ₹{savings / CONSOLIDATION_SAVINGS_FACTOR:,.0f}
+        Plants Involved: {context.get('plants')} ({context.get('plant_names')})
+
+        DECISION RULES:
+        1. ACTIONS & HOW-TO: Provide 4-5 EXTREMELY DETAILED, operational steps. For each, describe "Action: [What to do]" and "How: [Specific system/process steps in ERP/Sourcing tool]".
+        2. NO TIMELINES: Focus on the mechanics of the action, not the schedule.
+        3. RECOMMENDATION: Recommended Suppliers MUST be around {target_suppliers}. If {current_suppliers} is very high, you can recommend slightly more than {target_suppliers} but significantly less than {current_suppliers}.
+        4. EXPLAIN WHY: Link to volume leverage, administrative friction, and backup capacity. Explain exactly how consolidating from {current_suppliers} to {target_suppliers} vendors saves money.
+        5. LANGUAGE: USE EXTREMELY SIMPLE LANGUAGE. NO JARGON (Avoid words like 'leverage', 'rationalize', 'optimize').
+
+        OUTPUT FORMAT (JSON ONLY):
         {{
-            "decision": "AI DECISION: [One clear sentence. MUST mention why we chose EXACTLY {target_suppliers} vendors for this category]",
-            "why": "WHY: [2 bullet points justifying the reduction from {current_suppliers} to {target_suppliers}]",
-            "strategy": "ANALYSIS: [3 action-oriented steps to reach {target_suppliers} vendors in 7 days. Mention which type of vendor stays (e.g. 'local ones with risk < 3')]",
-            "action_type": "Execute RFQ or Migrate Spend or Execute Rate Card"
+            "recommended_suppliers": integer,
+            "decision": "Operational Decision based on Market Rationale and Internal Data",
+            "why": "Detailed multi-point reasoning in simple words (joined as a single string with bullets)",
+            "strategy": "Detailed operational playbook in simple words (joined as a single string with bullets)",
+            "action_type": "MUST be exactly one of: Execute RFQ, Migrate Spend, or Renegotiate"
         }}
-        
-        STRICT RULES:
-        - USE SIMPLE LANGUAGE. No 'operating models'.
-        - PRECISION: Your reasoning MUST match the target count of {target_suppliers}.
-        - ACTION-ORIENTED. 'Call the vendor' instead of 'Initiate communication'.
-        - The 'action_type' MUST be one of: 'Execute RFQ', 'Migrate Spend', 'Execute Rate Card'.
         """
 
         try:
@@ -564,6 +598,12 @@ class TailSpendAIAgent:
                 
             try:
                 result = json.loads(content)
+                # Ensure why and strategy are strings for the frontend
+                if isinstance(result.get('why'), list):
+                    result['why'] = "\n- ".join([str(x) for x in result['why'] if x]).strip()
+                if isinstance(result.get('strategy'), list):
+                    result['strategy'] = "\n- ".join([str(x) for x in result['strategy'] if x]).strip()
+                
                 self.advice_cache[cache_key] = result
                 self._save_cache()
                 return result
@@ -617,10 +657,10 @@ class TailSpendAIAgent:
 
     def get_governance_advice(self, category, spend, supplier_count):
         """
-        AI Governance Engine with Detailed Bulleted Reasoning.
-        Model: llama-3.1-8b-instant
+        AI Governance Engine with High-Detail Operational Detailing.
+        Model: llama-3.3-70b-versatile
         """
-        cache_key = f"gov_detailed_v5_{category}_{spend}"
+        cache_key = f"gov_detailed_v8_{category}_{spend}"
         if cache_key in self.advice_cache:
             return self.advice_cache[cache_key]
 
@@ -628,52 +668,46 @@ class TailSpendAIAgent:
         levers = self.search_web(category)
 
         prompt = f"""
-        You are a Senior Sourcing Assistant. Create a detailed commercial strategy for this category.
+        You are a Senior Strategic Sourcing Manager. Create a detailed, EXECUTIVE-GRADE commercial governance strategy for {category}.
         
-        CATEGORY: {category}
-        SPEND: ₹{float(spend):,.0f}
-        VENDORS: {supplier_count}
+        DATA CONTEXT:
+        - CATEGORY: {category}
+        - SPEND INTENSITY: ₹{float(spend):,.0f}
+        - CURRENT FRAGMENTATION: {supplier_count} Vendors
+        - MARKET CONTEXT: {levers}
         
-        INDUSTRY TRENDS (FOR REASONING):
-        {levers}
-        
-        STRICT RULES: YOU MUST PICK ONE OF THESE 4 BUCKETS:
-        
-        1. FOR STANDARD PRODUCTS (Filters, MRO, Office Supplies):
-           - Label & Recommendation: "Establish Blanket Agreement"
-           
-        2. FOR RECURRING SERVICES (Security, Staffing, Cleaning):
-           - Label & Recommendation: "Generate Rate Contract"
-           
-        3. FOR PROJECT WORK (Repairs, Audit, Legal):
-           - Label & Recommendation: "Launch Mini-Bid Framework"
-           
-        4. FOR ALL OTHER HIGH SPEND / UNMANAGED CATEGORIES:
-           - Label & Recommendation: "Launch Sourcing RFQ"
+        GOVERNANCE OPTIONS:
+        1. Blanket Purchase Agreement (High frequency, standard specs)
+        2. Rate Contract / MSA (Service-based, labor, recurring)
+        3. Mini-Bid Framework (Project based, repairs, uneven demand)
+        4. Sourcing RFQ (Consolidation of fragmented tail spend)
 
-        OUTPUT (STRICT JSON):
+        YOUR TASK:
+        1. Select the most appropriate option as Recommendation.
+        2. Provide 4-5 HIGHLY DETAILED reasoning points. Use QUANTIFIABLE DATA (₹{spend:,.0f} and {supplier_count} vendors) to justify the decision.
+        3. Provide 3-4 IMPACT points. Quantify the savings potential and operational efficiency based on market trends.
+        4. Define a 4-step execution workflow.
+
+        OUTPUT (JSON ONLY):
         {{
-            "strategy": "[The Chosen Bucket Name]",
-            "recommendation": "[The Exact Recommendation from the list above]",
-            "reasoning": "[Provide 3-4 detailed bullet points. 
-                          Bullet 1: Analyze the current vendor fragmentation (using the {supplier_count} count).
-                          Bullet 2: Mention a specific industry trend or lever from the search results.
-                          Bullet 3: Explain the commercial benchmark or benefit (e.g. volume lock-in).
-                          Bullet 4: Simple summary of the expected outcome.
-                          USE SIMPLE LANGUAGE. NO JARGON.]",
-            "action_label": "[The Exact Label from the list above]",
-            "workflow": ["Step 1", "Step 2", "Step 3", "Step 4"]
+            "strategy": "Title of the strategy",
+            "recommendation": "The chosen governance option name",
+            "reasoning": "4-5 detailed bullet points with numbers. MUST BE POINT WISE.",
+            "impact": "3-4 detailed bullet points quantifying savings/risk reduction. MUST BE POINT WISE.",
+            "action_label": "Choose from: Establish Blanket PO | Generate Rate Contract | Launch Mini-Bid Framework | Launch Sourcing RFQ",
+            "workflow": ["Step 1: Specific system action", "Step 2: Specific negotiation step", "Step 3: Internal approval/rollout", "Step 4: Compliance check"]
         }}
-        
+
         STRICT RULES:
-        - Reasoning MUST be 3-4 distinct bullet points.
-        - Use simple, direct language.
+        - NO PARAGRAPHS. Everything must be in point-wise (bullets starting with -).
+        - BE VERBOSE. Provide 2-3 lines of text for every point.
+        - USE QUANTIFIABLE IMPACT (e.g., 'Expected savings of ₹X based on {CONSOLIDATION_SAVINGS_FACTOR*100}% benchmark').
         """
 
         try:
             response = self._create_completion(
                 messages=[{"role": "user", "content": prompt}],
-                model="llama-3.1-8b-instant",
+                model="qwen/qwen3-32b",
                 response_format={"type": "json_object"}
             )
             
@@ -685,6 +719,13 @@ class TailSpendAIAgent:
                 content = content.split("```")[1].split("```")[0].strip()
                 
             result = json.loads(content)
+            # Ensure reasoning and impact are strings for the frontend
+            for field in ['reasoning', 'impact']:
+                if isinstance(result.get(field), list):
+                    result[field] = "\n- ".join([str(x) for x in result[field] if x]).strip()
+                elif field not in result:
+                    result[field] = "N/A"
+                
             self.advice_cache[cache_key] = result
             self._save_cache()
             return result
@@ -693,7 +734,8 @@ class TailSpendAIAgent:
             return {
                 "strategy": "Launch Sourcing RFQ",
                 "recommendation": "Launch Sourcing RFQ",
-                "reasoning": f"- You have {supplier_count} vendors here.\n- Market trends suggest prices are rising.\n- We should ask them all to bid to get a better price.",
+                "reasoning": f"- Managing ₹{spend:,.0f} across {supplier_count} vendors is inefficient.\n- Consolidating to top partners can unlock ~12% savings.",
+                "impact": f"- Savings Potential: ₹{spend * 0.12:,.0f}\n- Reduction in vendor management effort by 60%.",
                 "action_label": "Launch Sourcing RFQ",
                 "workflow": ["Analyze rates", "Standardize terms", "Draft agreement", "Roll out"]
             }
