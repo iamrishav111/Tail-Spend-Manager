@@ -429,6 +429,10 @@ class DataEngine:
             ai_rec = ai_strat.get('recommended_suppliers', target_suggestion)
             if isinstance(ai_rec, list) and len(ai_rec) > 0:
                 ai_rec = ai_rec[0]
+                
+            # --- Hard Overrides for specific categories ---
+            if cat in ['Laptops', 'Cloud Subscriptions']:
+                ai_strat['action_type'] = 'Renegotiate'
             
             try:
                 target_suppliers = int(ai_rec)

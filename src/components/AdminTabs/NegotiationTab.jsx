@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, User, Bot, AlertCircle, Loader, RefreshCw, FileText, UploadCloud, Zap } from 'lucide-react';
+import { MessageSquare, Send, User, Bot, AlertCircle, Loader, RefreshCw, FileText, UploadCloud, Zap, Sparkles, Search, TrendingUp, BarChart3, Globe, ShieldCheck } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -130,66 +130,136 @@ const NegotiationTab = ({ data }) => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] gap-2">
-      {/* Section 1: Compact Search Row */}
-      <div className="bg-white border border-border shadow-sm rounded-xl p-3 flex items-center gap-3">
-        <label className="text-[11px] font-bold text-secondary uppercase tracking-wider whitespace-nowrap pl-1">What are you buying?</label>
+    <div className="flex flex-col h-[calc(100vh-140px)] gap-3">
+
+      {/* === HEADER === */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary-hover rounded-xl blur-md opacity-30"></div>
+            <div className="relative bg-gradient-to-br from-primary to-primary-hover text-white p-2.5 rounded-xl shadow-lg">
+              <Sparkles size={20} />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-xl font-black text-text tracking-tight leading-tight">Negotiation AI</h1>
+            <p className="text-[11px] text-secondary font-medium tracking-wide">Strategic co-pilot powered by internal benchmarks &amp; live market intelligence</p>
+          </div>
+        </div>
+        {(chatHistory.length > 0 || category) && (
+          <button
+            onClick={resetChat}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-secondary bg-white border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shadow-sm"
+          >
+            <RefreshCw size={14} />
+            New Session
+          </button>
+        )}
+      </div>
+
+      {/* === SEARCH ROW === */}
+      <div className="bg-white border border-border/70 shadow-sm rounded-2xl p-3.5 flex items-center gap-3 ring-1 ring-black/[0.02]">
+        <div className="flex items-center gap-2 pl-1 pr-2 border-r border-border/60">
+          <Search size={14} className="text-primary" />
+          <label className="text-[11px] font-black text-text uppercase tracking-wider whitespace-nowrap">What are you buying?</label>
+        </div>
         <div className="flex-1 flex gap-2">
-          <input 
+          <input
             type="text"
-            className="flex-1 p-2.5 px-4 border border-border rounded-2xl text-sm bg-surface/30 focus:bg-white font-medium focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-all shadow-sm"
-            placeholder="e.g. Enterprise Laptops, Steel Pipes..."
+            className="flex-1 p-2.5 px-4 border border-border rounded-2xl text-sm bg-surface/40 focus:bg-white font-medium focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all shadow-sm placeholder:text-secondary/60"
+            placeholder="e.g. Enterprise Laptops, Steel Pipes, CMMS Licenses..."
             value={itemDescription}
             onChange={(e) => setItemDescription(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !category && handleClassify()}
             disabled={chatHistory.length > 0 || category !== ''}
           />
           {!category && (
-            <button 
-              className="btn btn-primary px-6 py-2 rounded-2xl flex items-center gap-2 whitespace-nowrap shadow-sm hover:shadow-md text-sm h-[42px] transition-all hover:-translate-y-0.5"
+            <button
+              className="btn btn-primary px-6 py-2 rounded-2xl flex items-center gap-2 whitespace-nowrap shadow-md hover:shadow-lg text-sm font-bold h-[42px] transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 disabled:shadow-md"
               onClick={handleClassify}
               disabled={!itemDescription.trim() || isClassifying}
             >
               {isClassifying ? <Loader size={14} className="animate-spin" /> : <Zap size={14} />}
-              Auto-Classify
+              {isClassifying ? 'Analyzing...' : 'Auto-Classify'}
             </button>
           )}
         </div>
       </div>
 
-      {/* Section 2: AI Classification Card */}
+      {/* === CLASSIFICATION BADGE === */}
       {category && (
-        <div className="bg-[#ECFDF5] border border-[#A7F3D0] rounded-2xl p-3 px-4 flex items-center gap-3 shadow-sm animate-fadeIn">
-          <div className="bg-[#10B981] text-white p-2 rounded-xl shadow-sm"><Bot size={18} /></div>
-          <div>
-            <div className="text-[10px] uppercase font-bold text-[#065F46] tracking-wider mb-0.5">AI Classification</div>
-            <div className="text-sm font-bold text-[#065F46]">
-              {l1Category && <span className="opacity-70 font-semibold">{l1Category} &rarr; </span>}
-              {category}
+        <div className="bg-gradient-to-r from-[#ECFDF5] via-[#F0FDF4] to-white border border-[#A7F3D0] rounded-2xl p-3 px-4 flex items-center gap-4 shadow-sm animate-fadeIn">
+          <div className="relative">
+            <div className="absolute inset-0 bg-[#10B981] rounded-xl blur-md opacity-30"></div>
+            <div className="relative bg-gradient-to-br from-[#10B981] to-[#059669] text-white p-2.5 rounded-xl shadow-md"><Bot size={18} /></div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase font-black text-[#065F46] tracking-widest mb-0.5 flex items-center gap-1.5">
+              <ShieldCheck size={10} /> AI Classification &amp; Context Loaded
             </div>
+            <div className="text-sm font-bold text-[#065F46] truncate">
+              {l1Category && <span className="opacity-60 font-semibold">{l1Category}</span>}
+              {l1Category && <span className="opacity-40 mx-1.5">›</span>}
+              <span>{category}</span>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-[#065F46]/70 uppercase tracking-wider">
+            <div className="flex items-center gap-1 bg-white/60 px-2 py-1 rounded-md border border-[#A7F3D0]/60"><BarChart3 size={10} /> Internal Benchmark</div>
+            <div className="flex items-center gap-1 bg-white/60 px-2 py-1 rounded-md border border-[#A7F3D0]/60"><Globe size={10} /> Live Market</div>
           </div>
         </div>
       )}
 
-      {/* Section 3: Chat Area */}
-      <div className="card p-0 flex-1 flex flex-col overflow-hidden border-border/60 shadow-sm relative">
+      {/* === CHAT AREA === */}
+      <div className="card p-0 flex-1 flex flex-col overflow-hidden border-border/60 shadow-md relative rounded-2xl">
+
         {!category && (
-          <div className="absolute inset-0 z-10 bg-surface/60 backdrop-blur-[2px] flex items-center justify-center">
-            <div className="bg-white p-6 rounded-lg shadow-lg border border-primary/10 text-center max-w-md">
-              <MessageSquare size={32} className="text-primary mx-auto mb-3" />
-              <h3 className="text-lg font-bold text-text mb-2">Negotiation Co-Pilot</h3>
-              <p className="text-sm text-secondary">Describe the item you are buying above and click Auto-Classify to inject your company's historical benchmarks and live market data.</p>
+          <div className="absolute inset-0 z-10 bg-gradient-to-br from-surface/80 via-white/70 to-surface/80 backdrop-blur-[3px] flex items-center justify-center px-4">
+            <div className="bg-white p-8 rounded-2xl shadow-2xl border border-primary/10 text-center max-w-lg ring-1 ring-black/[0.04]">
+              <div className="relative inline-block mb-4">
+                <div className="absolute inset-0 bg-primary rounded-2xl blur-xl opacity-20"></div>
+                <div className="relative bg-gradient-to-br from-primary to-primary-hover text-white p-4 rounded-2xl shadow-lg inline-flex">
+                  <MessageSquare size={32} />
+                </div>
+              </div>
+              <h3 className="text-xl font-black text-text mb-2 tracking-tight">Negotiation Co-Pilot</h3>
+              <p className="text-sm text-secondary leading-relaxed mb-5">
+                Describe the item you are buying above and click <strong className="text-text">Auto-Classify</strong> to inject your company's historical benchmarks and live market data into the conversation.
+              </p>
+              <div className="grid grid-cols-3 gap-2 text-[10px]">
+                <div className="flex flex-col items-center gap-1.5 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                  <BarChart3 size={16} className="text-primary" />
+                  <span className="font-bold text-text">Internal Volume</span>
+                  <span className="text-secondary text-center leading-tight">Historical category spend</span>
+                </div>
+                <div className="flex flex-col items-center gap-1.5 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                  <TrendingUp size={16} className="text-primary" />
+                  <span className="font-bold text-text">Benchmarks</span>
+                  <span className="text-secondary text-center leading-tight">Competitor &amp; contract rates</span>
+                </div>
+                <div className="flex flex-col items-center gap-1.5 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                  <Globe size={16} className="text-primary" />
+                  <span className="font-bold text-text">Market Signal</span>
+                  <span className="text-secondary text-center leading-tight">Live web trends</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-[#f8f9fa]">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-[#fafbfc] to-[#f5f6f8]">
           {chatHistory.length === 0 && category && (
             <div className="flex justify-center my-8">
-              <div className="bg-primary/5 border border-primary/20 text-primary p-4 rounded-lg text-sm max-w-lg text-center font-medium">
-                Context loaded for <span className="font-bold">{category}</span>. <br/>
-                Paste the supplier's initial offer below to begin the strategy analysis.
+              <div className="bg-white border border-primary/20 text-text p-5 rounded-2xl text-sm max-w-lg text-center font-medium shadow-sm">
+                <div className="flex items-center justify-center gap-2 text-primary font-bold mb-1">
+                  <Sparkles size={14} />
+                  <span className="text-xs uppercase tracking-wider">Context Ready</span>
+                </div>
+                <p className="text-secondary leading-relaxed">
+                  Negotiation context loaded for <span className="font-bold text-text">{category}</span>.<br/>
+                  Paste the supplier's initial offer below to begin the strategy analysis.
+                </p>
               </div>
             </div>
           )}
@@ -197,31 +267,35 @@ const NegotiationTab = ({ data }) => {
           {chatHistory.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`flex gap-3 ${msg.role === 'user' ? 'max-w-[75%] flex-row-reverse' : 'w-full md:max-w-[95%] flex-row'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm ${msg.role === 'user' ? 'bg-primary text-white' : 'bg-secondary text-white'}`}>
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-md ring-2 ring-white ${msg.role === 'user' ? 'bg-gradient-to-br from-primary to-primary-hover text-white' : 'bg-gradient-to-br from-[#1f2937] to-[#374151] text-white'}`}>
                   {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                 </div>
-                <div className={`p-5 rounded-2xl text-sm shadow-sm flex-1 ${msg.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-white border border-border rounded-tl-none'}`}>
+                <div className={`p-5 rounded-2xl text-sm shadow-sm flex-1 ${msg.role === 'user' ? 'bg-gradient-to-br from-primary to-primary-hover text-white rounded-tr-none' : 'bg-white border border-border/70 rounded-tl-none ring-1 ring-black/[0.02]'}`}>
                   {msg.role === 'assistant' ? (
-                    <div className="prose prose-sm md:prose-base prose-p:leading-relaxed prose-headings:font-bold prose-headings:text-primary prose-a:text-primary prose-strong:text-text max-w-none text-text">
+                    <div className="prose prose-sm md:prose-base prose-p:leading-relaxed prose-headings:font-bold prose-headings:text-primary prose-headings:tracking-tight prose-a:text-primary prose-strong:text-text prose-ul:my-3 prose-li:my-0.5 max-w-none text-text">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
-                    <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                    <div className="whitespace-pre-wrap leading-relaxed font-medium">{msg.content}</div>
                   )}
                 </div>
               </div>
             </div>
           ))}
-          
+
           {isTyping && (
             <div className="flex justify-start">
               <div className="flex gap-3 max-w-[85%]">
-                <div className="w-8 h-8 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center flex-shrink-0 mt-1">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1f2937] to-[#374151] text-white flex items-center justify-center flex-shrink-0 mt-1 shadow-md ring-2 ring-white">
                   <Bot size={16} />
                 </div>
-                <div className="p-4 rounded-xl bg-white border border-border rounded-tl-none shadow-sm flex items-center gap-2">
-                  <Loader className="animate-spin text-secondary" size={16} />
-                  <span className="text-xs text-secondary font-medium">Analyzing leverage & drafting response...</span>
+                <div className="px-5 py-4 rounded-2xl bg-white border border-border/70 rounded-tl-none shadow-sm flex items-center gap-3 ring-1 ring-black/[0.02]">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2 h-2 bg-primary/70 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                  <span className="text-xs text-secondary font-semibold tracking-wide">Analyzing leverage &amp; drafting response</span>
                 </div>
               </div>
             </div>
@@ -229,22 +303,22 @@ const NegotiationTab = ({ data }) => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Section 4: Bottom Action Row */}
-        <div className="p-3 bg-white border-t border-border shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+        {/* === BOTTOM ACTION ROW === */}
+        <div className="p-4 bg-white border-t border-border/70 shadow-[0_-6px_16px_rgba(0,0,0,0.03)]">
           <div className="max-w-4xl mx-auto w-full flex items-end gap-3">
-            
+
             {/* Upload RFQ Button */}
             <div className="flex-shrink-0 mb-0.5">
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept=".pdf,.txt,.csv" 
-                onChange={handleFileUpload} 
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".pdf,.txt,.csv"
+                onChange={handleFileUpload}
                 disabled={chatHistory.length > 0 || isUploading || !category}
               />
-              <button 
-                className={`h-[42px] px-4 rounded-2xl flex items-center justify-center border gap-2 text-xs font-bold transition-all shadow-sm ${!category ? 'bg-surface border-border text-[#ccc] cursor-not-allowed' : (rfqContext ? 'bg-[#10B981] text-white border-[#10B981] hover:bg-[#059669]' : 'bg-white text-secondary border-border hover:bg-gray-50 hover:border-secondary/30')}`}
+              <button
+                className={`h-[44px] px-4 rounded-2xl flex items-center justify-center border gap-2 text-xs font-bold transition-all shadow-sm ${!category ? 'bg-surface border-border text-[#ccc] cursor-not-allowed' : (rfqContext ? 'bg-gradient-to-br from-[#10B981] to-[#059669] text-white border-[#10B981] hover:shadow-md' : 'bg-white text-secondary border-border hover:bg-primary/5 hover:border-primary/30 hover:text-primary')}`}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={chatHistory.length > 0 || isUploading || !category}
               >
@@ -254,9 +328,9 @@ const NegotiationTab = ({ data }) => {
             </div>
 
             {/* Main Input */}
-            <div className="flex-1 flex items-end gap-2 bg-gray-50/50 border border-border rounded-2xl shadow-sm focus-within:shadow-md focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/5 transition-all p-1.5 mb-0.5">
+            <div className="flex-1 flex items-end gap-2 bg-surface/40 border border-border rounded-2xl shadow-sm focus-within:shadow-lg focus-within:border-primary focus-within:bg-white focus-within:ring-4 focus-within:ring-primary/10 transition-all p-1.5 mb-0.5">
               <textarea
-                className="flex-1 p-2.5 px-3 bg-transparent text-sm outline-none resize-none min-h-[42px] max-h-[200px] font-medium placeholder:font-normal"
+                className="flex-1 p-2.5 px-3 bg-transparent text-sm outline-none resize-none min-h-[44px] max-h-[200px] font-medium placeholder:font-normal placeholder:text-secondary/60"
                 placeholder={category ? "Paste the supplier's message or offer here..." : "Classify an item above to start..."}
                 rows={1}
                 value={inputMessage}
@@ -268,19 +342,20 @@ const NegotiationTab = ({ data }) => {
                 onKeyDown={handleKeyPress}
                 disabled={!category || isTyping}
               />
-              <button 
-                className={`w-[40px] h-[40px] rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${(!inputMessage.trim() || !category || isTyping) ? 'bg-surface text-secondary cursor-not-allowed' : 'bg-primary text-white hover:bg-primary-hover shadow-lg hover:-translate-y-0.5'}`}
+              <button
+                className={`w-[42px] h-[42px] rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${(!inputMessage.trim() || !category || isTyping) ? 'bg-surface text-secondary cursor-not-allowed' : 'bg-gradient-to-br from-primary to-primary-hover text-white hover:shadow-lg hover:-translate-y-0.5 shadow-md'}`}
                 onClick={handleSend}
                 disabled={!inputMessage.trim() || !category || isTyping}
               >
                 <Send size={18} className={inputMessage.trim() && !isTyping ? 'translate-x-[0.5px] -translate-y-[0.5px]' : ''} />
               </button>
             </div>
-            
+
           </div>
-          <div className="max-w-4xl mx-auto w-full mt-2">
-             <div className="text-[10px] text-secondary text-center font-medium flex items-center justify-center gap-1.5">
-                <AlertCircle size={10} /> AI Agent analyzes historical volume, competitor prices, and live web market trends.
+          <div className="max-w-4xl mx-auto w-full mt-3">
+             <div className="text-[10px] text-secondary text-center font-semibold flex items-center justify-center gap-1.5 tracking-wide">
+                <AlertCircle size={10} className="text-primary/60" />
+                AI analyzes historical volume, competitor prices, and live web market trends to draft strategy and counter-offer emails.
              </div>
           </div>
         </div>

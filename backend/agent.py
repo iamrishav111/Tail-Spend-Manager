@@ -567,8 +567,11 @@ class TailSpendAIAgent:
             "decision": "Operational Decision based on Market Rationale and Internal Data",
             "why": "Detailed multi-point reasoning in simple words (joined as a single string with bullets)",
             "strategy": "Detailed operational playbook in simple words (joined as a single string with bullets)",
-            "action_type": "MUST be exactly one of: Execute RFQ, Migrate Spend, or Renegotiate"
+            "action_type": "Descriptive label (e.g., 'Execute RFQ', 'Migrate Spend', 'Renegotiate', 'Launch Mini-Bid Framework', 'Consolidate Partners')"
         }}
+        
+        SPECIFIC OVERRIDES:
+        - For 'Laptops' and 'Cloud Subscriptions': ALWAYS use 'Renegotiate' as the action_type.
         """
 
         try:
@@ -660,7 +663,7 @@ class TailSpendAIAgent:
         AI Governance Engine with High-Detail Operational Detailing.
         Model: llama-3.3-70b-versatile
         """
-        cache_key = f"gov_detailed_v8_{category}_{spend}"
+        cache_key = f"gov_detailed_v9_{category}_{spend}"
         if cache_key in self.advice_cache:
             return self.advice_cache[cache_key]
 
@@ -669,21 +672,32 @@ class TailSpendAIAgent:
 
         prompt = f"""
         You are a Senior Strategic Sourcing Manager. Create a detailed, EXECUTIVE-GRADE commercial governance strategy for {category}.
-        
+
         DATA CONTEXT:
         - CATEGORY: {category}
         - SPEND INTENSITY: ₹{float(spend):,.0f}
         - CURRENT FRAGMENTATION: {supplier_count} Vendors
         - MARKET CONTEXT: {levers}
-        
-        GOVERNANCE OPTIONS:
-        1. Blanket Purchase Agreement (High frequency, standard specs)
-        2. Rate Contract / MSA (Service-based, labor, recurring)
-        3. Mini-Bid Framework (Project based, repairs, uneven demand)
-        4. Sourcing RFQ (Consolidation of fragmented tail spend)
+
+        GOVERNANCE OPTIONS — pick the ONE that best matches the category profile below. Do not default to Sourcing RFQ for everything:
+
+        1. "Establish Blanket PO" — pick when the category has HIGH FREQUENCY, STANDARD specs, RECURRING demand, and a clear preferred supplier is plausible. Typical fits: office supplies, stationery, pantry / housekeeping, packaging consumables, standard MRO consumables, lubricants, fasteners, common spares, uniforms, PPE.
+
+        2. "Generate Rate Contract" — pick when the category is SERVICE-BASED or LABOR-BASED or has MULTI-USER LICENSE / SUBSCRIPTION characteristics, where multiple suppliers can serve under a standardized rate-card. Typical fits: software / SaaS / CMMS licenses, IT services, AMC / maintenance contracts, logistics rates, manpower / contract labor, calibration / testing services, lab consumables under MSA.
+
+        3. "Launch Mini-Bid Framework" — pick when the category is PROJECT-BASED, VARIABLE-SCOPE, NON-RECURRING-PATTERN, or has uneven demand where a fixed rate-card is impractical and you want pre-qualified vendors bidding per requirement. Typical fits: civil works, construction, repair projects, capex equipment installation, marketing / creative services, consulting engagements, training programs, one-off engineering studies.
+
+        4. "Launch Sourcing RFQ" — pick when the category is UNGOVERNED (no contract), highly FRAGMENTED across many vendors, and you need MARKET DISCOVERY before any of the above. Typical fits: brand-new categories, freshly discovered tail, export / industrial packaging with many small vendors, miscellaneous unclassified spend.
+
+        DECISION RULES (apply in this order):
+        - If category name suggests software / license / subscription / SaaS / CMMS / IT services / AMC / maintenance contract / manpower / labor / logistics rate → "Generate Rate Contract".
+        - Else if category name suggests project / civil / construction / repair / consulting / marketing / creative / training / capex / installation → "Launch Mini-Bid Framework".
+        - Else if category name suggests office / stationery / pantry / housekeeping / packaging consumable / MRO / lubricant / fastener / PPE / uniform / common spare → "Establish Blanket PO".
+        - Else (ungoverned tail, fragmented, no clear pattern) → "Launch Sourcing RFQ".
+        - Use {supplier_count} as a tiebreaker: if >15 suppliers and category is fragmented, lean Sourcing RFQ; if 5-15 with a clear recurring pattern, lean Blanket PO; if standardized service, lean Rate Contract.
 
         YOUR TASK:
-        1. Select the most appropriate option as Recommendation.
+        1. Apply the decision rules above to pick the recommendation FOR THIS SPECIFIC CATEGORY NAME ({category}). Justify your pick by referencing the category-name semantics in your reasoning.
         2. Provide 4-5 HIGHLY DETAILED reasoning points. Use QUANTIFIABLE DATA (₹{spend:,.0f} and {supplier_count} vendors) to justify the decision.
         3. Provide 3-4 IMPACT points. Quantify the savings potential and operational efficiency based on market trends.
         4. Define a 4-step execution workflow.
